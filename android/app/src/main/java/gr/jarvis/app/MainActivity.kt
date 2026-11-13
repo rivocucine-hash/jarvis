@@ -138,9 +138,10 @@ class MainActivity : Activity() {
             if (status == TextToSpeech.SUCCESS) {
                 tts?.language = Locale("el", "GR"); ttsReady = true
                 tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-                    override fun onStart(id: String?) { js("window.__nativeTtsStart && __nativeTtsStart()") }
-                    override fun onDone(id: String?) { js("window.__nativeTtsDone && __nativeTtsDone()") }
-                    @Deprecated("Deprecated in Java") override fun onError(id: String?) { js("window.__nativeTtsDone && __nativeTtsDone()") }
+                    // Τα αναγνωριστικά που αρχίζουν με «m» είναι η ανάγνωση μηνυμάτων: η σελίδα μαθαίνει μόνο πότε τελείωσε.
+                    override fun onStart(id: String?) { if (id?.startsWith("m") == true) return; js("window.__nativeTtsStart && __nativeTtsStart()") }
+                    override fun onDone(id: String?) { if (id?.startsWith("m") == true) { if (id == "mLast") js("window.__nativeMsgDone && __nativeMsgDone()"); return }; js("window.__nativeTtsDone && __nativeTtsDone()") }
+                    @Deprecated("Deprecated in Java") override fun onError(id: String?) { if (id?.startsWith("m") == true) { if (id == "mLast") js("window.__nativeMsgDone && __nativeMsgDone()"); return }; js("window.__nativeTtsDone && __nativeTtsDone()") }
                 })
                 note("tts ready")
                 // Η λίστα φωνών διαβάζεται στο παρασκήνιο: η σελίδα δεν περιμένει ποτέ τη μηχανή ομιλίας.
@@ -505,6 +506,81 @@ class MainActivity : Activity() {
         /** Όσο μιλάει ο βοηθός: ακούει αν ο χρήστης μιλήσει από πάνω του. sensitivity 1 (λίγο) έως 3 (πολύ). */
         @JavascriptInterface fun bargeStart(sensitivity: Int) { if (!hasMic() || listeningNative) return; barge.start(when (sensitivity) { 3 -> 1.5; 1 -> 2.6; else -> 1.9 }) }
         @JavascriptInterface fun bargeStop() { barge.stop() }
+        /* ---------- Μηνύματα: διαβάζονται φωναχτά από το κινητό, μόνο όταν ζητηθεί. Το περιεχόμενο ΔΕΝ επιστρέφεται στη σελίδα. ---------- */
+        private fun msgAccess(): Boolean = try { (Settings.Secure.getString(contentResolver, "enabled_notification_listeners") ?: "").contains(packageName) } catch (_: Throwable) { false }
+        @JavascriptInterface fun hasMsgAccess(): Boolean = msgAccess()
+        @JavascriptInterface fun askMsgAccess() {
+            main.post {
+                try { startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                catch (_: Throwable) { try { startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + packageName)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (_: Throwable) {} }
+            }
+        }
+        /** Επιστρέφει ΜΟΝΟ αριθμούς: {status, count, skipped}. Ούτε αποστολέας ούτε κείμενο φτάνουν στη σελίδα ή στην καταγραφή. */
+        @JavascriptInterface fun readMessages(rate: Float, pitch: Float, voiceName: String): String {
+            val out = JSONObject()
+            if (!msgAccess()) return out.put("status", "noaccess").toString()
+            val r = MsgListener.read() ?: return out.put("status", "notready").toString()
+            val t = tts ?: return out.put("status", "notts").toString()
+            // Τα μηνύματα εκφωνούνται ΜΟΝΟ με φωνή που τρέχει πάνω στο κινητό. Μια «διαδικτυακή» φωνή θα έστελνε το κείμενο σε διακομιστή.
+            val chosen = voiceMap[voiceName]
+            val local = if (chosen != null && !chosen.isNetworkConnectionRequired) chosen else voiceMap.values.firstOrNull { !it.isNetworkConnectionRequired }
+                ?: return out.put("status", "novoice").toString()
+            main.post {
+                try {
+                    t.voice = local
+                    t.setSpeechRate(rate); t.setPitch(pitch)
+                    val lines = ArrayList<String>()
+                    if (r.list.isEmpty()) lines.add(if (r.skipped > 0) "Δεν έχετε άλλα μηνύματα." else "Δεν έχετε νέα μηνύματα.")
+                    else {
+                        lines.add(if (r.list.size == 1) "Έχετε ένα μήνυμα." else "Έχετε " + r.list.size + " μηνύματα.")
+                        for (m in r.list) lines.add(m.app + (if (m.from.isNotEmpty()) ", από " + m.from else "") + (if (m.text.isNotEmpty()) ". " + m.text else "") + ".")
+                    }
+                    if (r.skipped > 0) lines.add("Παρέλειψα " + r.skipped + (if (r.skipped == 1) " μήνυμα" else " μηνύματα") + " με κωδικούς ή οικονομικά στοιχεία.")
+                    for ((i, line) in lines.withIndex()) {
+                        t.speak(line, if (i == 0) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD, null, if (i == lines.size - 1) "mLast" else "m" + i)
+                    }
+                } catch (_: Throwable) { js("window.__nativeMsgDone && __nativeMsgDone()") }
+            }
+            return out.put("status", "ok").put("count", r.list.size).put("skipped", r.skipped).toString()
+        }
+
+        /* ---------- Επαφές του κινητού: κλήση ή SMS με το όνομα. Ο αριθμός δεν επιστρέφεται στη σελίδα· η κλήση/αποστολή γίνεται μόνο αφού πατήσει ο χρήστης. ---------- */
+        private fun plainName(s: String): String = java.text.Normalizer.normalize(s.lowercase(), java.text.Normalizer.Form.NFD).replace(Regex("[^a-zα-ω0-9 ]"), "").replace('ς', 'σ').trim()
+        private fun findContacts(query: String): List<Pair<String, String>> {
+            val stems = plainName(query).split(" ").filter { it.length >= 2 }.map { w -> if (w.length > 3) w.dropLast(1) else w }
+            if (stems.isEmpty()) return emptyList()
+            val found = LinkedHashMap<String, String>()
+            val cols = arrayOf(android.provider.ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME, android.provider.ContactsContract.CommonDataKinds.Phone.NUMBER)
+            contentResolver.query(android.provider.ContactsContract.CommonDataKinds.Phone.CONTENT_URI, cols, null, null, null)?.use { c ->
+                while (c.moveToNext()) {
+                    val name = c.getString(0) ?: continue; val num = c.getString(1) ?: continue
+                    val words = plainName(name).split(" ")
+                    if (stems.all { st -> words.any { it.startsWith(st) } } && !found.containsKey(name)) found[name] = num
+                }
+            }
+            return found.entries.map { it.key to it.value }
+        }
+        /** kind: "call" ανοίγει το πληκτρολόγιο κλήσης, "sms" ανοίγει νέο SMS με έτοιμο κείμενο. Επιστρέφει {status, name, options(ονόματα μόνο)}. */
+        @JavascriptInterface fun contactAction(kind: String, query: String, body: String): String {
+            val out = JSONObject()
+            if (checkSelfPermission(Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) {
+                main.post { try { requestPermissions(arrayOf(Manifest.permission.READ_CONTACTS), REQ_PERMS) } catch (_: Throwable) {} }
+                return out.put("status", "noperm").toString()
+            }
+            val list = try { findContacts(query) } catch (_: Throwable) { emptyList() }
+            if (list.isEmpty()) return out.put("status", "none").toString()
+            val exact = list.filter { plainName(it.first) == plainName(query) }
+            val pick = if (list.size == 1) list[0] else if (exact.size == 1) exact[0] else null
+            if (pick == null) return out.put("status", "many").put("options", JSONArray(list.take(6).map { it.first })).toString()
+            main.post {
+                try {
+                    val i = if (kind == "sms") Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:" + Uri.encode(pick.second))).putExtra("sms_body", body.take(500))
+                            else Intent(Intent.ACTION_DIAL, Uri.parse("tel:" + Uri.encode(pick.second)))
+                    startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                } catch (_: Throwable) {}
+            }
+            return out.put("status", "ok").put("name", pick.first).toString()
+        }
         @JavascriptInterface fun askCalendar() { main.post { try { requestPermissions(arrayOf(Manifest.permission.READ_CALENDAR), REQ_PERMS) } catch (_: Throwable) {} } }
         @JavascriptInterface fun copyText(text: String) {
             main.post {
