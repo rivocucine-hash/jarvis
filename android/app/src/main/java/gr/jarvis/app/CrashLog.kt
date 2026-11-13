@@ -47,7 +47,7 @@ object CrashLog {
             val list = am.getHistoricalProcessExitReasons(ctx.packageName, 0, 3)
             val sb = StringBuilder()
             for (info in list) {
-                sb.append("reason=").append(info.reason).append(" status=").append(info.status).append(" desc=").append(info.description ?: "").append("\n")
+                sb.append("reason=").append(info.reason).append(" status=").append(info.status).append(" importance=").append(info.importance).append(" rssMB=").append(info.rss / 1024).append(" desc=").append(info.description ?: "").append("\n")
                 if (info.reason == android.app.ApplicationExitInfo.REASON_CRASH_NATIVE || info.reason == android.app.ApplicationExitInfo.REASON_CRASH) {
                     val bytes = try { info.traceInputStream?.use { it.readBytes() } } catch (_: Throwable) { null }
                     if (bytes != null) {

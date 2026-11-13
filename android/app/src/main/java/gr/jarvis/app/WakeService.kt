@@ -75,11 +75,13 @@ class WakeService : Service(), RecognitionListener {
             Log.e(TAG, "foreground", e); CrashLog.note(this, "WakeService.startForeground", e); stopSelf(); return
         }
         running = true
+        stage("1 foreground service ok")
         // Σημάδι «ξεκινάει η ακρόαση»: αν η εφαρμογή κλείσει πριν σβηστεί, την επόμενη φορά η ακρόαση απενεργοποιείται.
         getSharedPreferences("jarvis", Context.MODE_PRIVATE).edit().putBoolean("wakeStarting", true).commit()
         try {
+            stage("2 unpack model start")
             StorageService.unpack(this, "model-en-us", "model",
-                { m: Model -> model = m; startListening() },
+                { m: Model -> model = m; stage("3 model loaded"); startListening() },
                 { e: java.io.IOException -> Log.e(TAG, "model", e); fail("Vosk model", e) })
         } catch (e: Throwable) { fail("Vosk unpack", e) }
     }
@@ -120,13 +122,20 @@ class WakeService : Service(), RecognitionListener {
             .build()
     }
 
+    /** Σημάδι προόδου: γράφεται αμέσως στον δίσκο, ώστε να ξέρουμε πού έφτασε αν το σύστημα τερματίσει την εφαρμογή. */
+    private fun stage(s: String) { try { getSharedPreferences("jarvis", Context.MODE_PRIVATE).edit().putString("wakeStage", s + " @" + (SystemClock.elapsedRealtime() - t0) + "ms").commit() } catch (_: Throwable) {} }
+    private val t0 = SystemClock.elapsedRealtime()
+
     private fun startListening() {
         val m = model ?: return
         if (paused || speech != null) return
         try {
+            stage("4 creating recognizer")
             val rec = Recognizer(m, 16000f, "[\"jarvis\", \"[unk]\"]")
+            stage("5 recognizer ok, opening microphone")
             speech = SpeechService(rec, 16000f).also { it.startListening(this) }
-            main.postDelayed({ getSharedPreferences("jarvis", Context.MODE_PRIVATE).edit().remove("wakeStarting").apply() }, 3000)
+            stage("6 listening")
+            main.postDelayed({ getSharedPreferences("jarvis", Context.MODE_PRIVATE).edit().remove("wakeStarting").apply(); stage("7 stable 3s") }, 3000)
         } catch (e: UnsatisfiedLinkError) { fail("Vosk native", e) }
         catch (e: Throwable) { Log.e(TAG, "listen", e); CrashLog.note(this, "WakeService.listen", e); main.postDelayed({ startListening() }, 3000) }
     }

@@ -67,7 +67,7 @@ class MainActivity : Activity() {
         // Αν την προηγούμενη φορά η εφαρμογή έκλεισε, δείχνουμε πρώτα την αιτία, πριν ξεκινήσει οτιδήποτε.
         if (prefs.getBoolean("wakeStarting", false)) {
             val header = "Η ακρόαση «Τζάρβις» (Vosk) έκλεισε την εφαρμογή κατά την εκκίνησή της.\nΈκδοση εφαρμογής: " + appVersion() +
-                "\nAndroid " + Build.VERSION.RELEASE + " (SDK " + Build.VERSION.SDK_INT + ") · " + Build.MANUFACTURER + " " + Build.MODEL + " · " + Build.SUPPORTED_ABIS.joinToString()
+                "\nAndroid " + Build.VERSION.RELEASE + " (SDK " + Build.VERSION.SDK_INT + ") · " + Build.MANUFACTURER + " " + Build.MODEL + " · " + Build.SUPPORTED_ABIS.joinToString() + "\nΤελευταίο βήμα ακρόασης: " + (prefs.getString("wakeStage", "-") ?: "-")
             val old = prefs.getString("lastCrash", null)
             prefs.edit().remove("wakeStarting").putBoolean("wake", false).putInt("wakeBlockedVersion", appVersion())
                 .putString("lastCrash", header + "\n\n" + CrashLog.exitInfo(this) + (if (old != null) "\n\n" + old else "")).commit()
