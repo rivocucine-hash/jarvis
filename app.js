@@ -383,13 +383,17 @@ async function askAI(text) {
       if (!r2.ok) { aiHistory.pop(); return `Ο εγκέφαλος ${P.name} επέστρεψε σφάλμα: ${j2.error?.message || r2.status}. Ελέγξτε το κλειδί και το μοντέλο στις ρυθμίσεις.`; }
       const o2 = (j2.choices?.[0]?.message?.content || '').trim(); if (o2) aiHistory.push({ role: 'model', parts: [{ text: o2 }] }); return o2 || null;
     }
-    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(S.model || defaults.model)}:generateContent`, {
+    // Για ερωτήσεις επικαιρότητας ή «ψάξε/βρες/πρότεινε», ο εγκέφαλος ψάχνει στο Google (δωρεάν λειτουργία του Gemini). Αν δεν επιτρέπεται, απαντά χωρίς αναζήτηση.
+    const wantSearch = S.webSearch !== false && navigator.onLine && /(σημερα|τωρα|φετοσ|χθεσ|αυριο|τελευται|προσφατ|νεα|ειδησ|τιμη|ποσο κανει|ποσο κοστιζει|ποτε παιζει|αποτελεσμ|σκορ|ποιοσ κερδισε|ψαξε|βρεσ|αναζητησ|προτεινε|προτειν|καλυτερ|ωραριο|ανοιχτ|που μπορω|202\d)/.test(norm(text));
+    const gUrl = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(S.model || defaults.model)}:generateContent`;
+    const gReq = (search) => fetch(gUrl, {
       method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': S.geminiKey },
-      body: JSON.stringify({ system_instruction: { parts: [{ text: sys }] }, contents: aiHistory, generationConfig: { temperature: 0.8, maxOutputTokens: 900 } }),
+      body: JSON.stringify({ system_instruction: { parts: [{ text: sys }] }, contents: aiHistory, generationConfig: { temperature: 0.8, maxOutputTokens: 900 }, ...(search ? { tools: [{ google_search: {} }] } : {}) }),
     });
-    const j = await r.json();
+    let r = await gReq(wantSearch), j = await r.json();
+    if (!r.ok && wantSearch) { r = await gReq(false); j = await r.json(); }
     if (!r.ok) { aiHistory.pop(); return `Ο εγκέφαλος ΤΝ επέστρεψε σφάλμα: ${j.error?.message || r.status}. Ελέγξτε το κλειδί και το μοντέλο στις ρυθμίσεις.`; }
-    const out = j.candidates?.[0]?.content?.parts?.map((p) => p.text).join('').trim();
+    const out = (j.candidates?.[0]?.content?.parts || []).map((p) => p.text || '').join('').trim();
     if (out) aiHistory.push({ role: 'model', parts: [{ text: out }] });
     return out || null;
   } catch { aiHistory.pop(); return null; }
@@ -577,11 +581,15 @@ async function handle(raw) {
   let raw2 = n2 !== n ? raw.split(/\s+/).slice(raw.split(/\s+/).length - n2.split(' ').length).join(' ') : raw;
 
   Core.set('thinking');
+  const done = (cmd, out) => { try { if (window.onCommand) onCommand(cmd, norm(cmd), out); } catch (e) { console.error(e); } return respond(out); };
+  // συνέχεια κουβέντας: «κι αύριο;», «και στο Αγρίνιο;» συνεχίζουν την προηγούμενη εντολή
+  const fu = window.followUp ? followUp(raw2, n2) : null;
+  if (fu) { const f = await runIntents(fu, norm(fu)); if (f != null) return done(fu, f); }
   const direct = await runIntents(raw2, n2);
-  if (direct != null) return respond(direct);
+  if (direct != null) return done(raw2, direct);
   // ελεύθερη ομιλία: βρίσκουμε ποια γνωστή εντολή εννοεί (χωρίς ίντερνετ)
   const guess = window.understand ? understand(n2) : null;
-  if (guess) { const g = await runIntents(guess, norm(guess)); if (g != null) return respond(g); }
+  if (guess) { const g = await runIntents(guess, norm(guess)); if (g != null) return done(guess, g); }
   // fallback: ο εγκέφαλος ΤΝ απαντά ή διαλέγει εντολή
   const ai = await askAI(raw);
   if (ai) {

@@ -431,6 +431,26 @@ class MainActivity : Activity() {
             val log = try { WakeService.logFile(this@MainActivity).readText() } catch (_: Throwable) { "" }
             return if (withExit) "JARVIS v" + appVersion() + "\n" + log + "\n--- Android: τελευταίοι τερματισμοί ---\n" + CrashLog.exitInfo(this@MainActivity) else log
         }
+        /** Ραντεβού από το ημερολόγιο του κινητού για τις επόμενες μέρες. Διαβάζονται τοπικά, δεν στέλνονται πουθενά από εδώ. */
+        @JavascriptInterface fun calendarEvents(days: Int): String {
+            val out = JSONObject()
+            if (checkSelfPermission(Manifest.permission.READ_CALENDAR) != PackageManager.PERMISSION_GRANTED) return out.put("denied", true).toString()
+            val arr = JSONArray()
+            try {
+                val from = System.currentTimeMillis() - 12 * 3600000L
+                val to = System.currentTimeMillis() + days.coerceIn(1, 31) * 86400000L
+                val uri = android.provider.CalendarContract.Instances.CONTENT_URI.buildUpon().let { android.content.ContentUris.appendId(it, from); android.content.ContentUris.appendId(it, to); it.build() }
+                val cols = arrayOf(android.provider.CalendarContract.Instances.TITLE, android.provider.CalendarContract.Instances.BEGIN, android.provider.CalendarContract.Instances.END, android.provider.CalendarContract.Instances.ALL_DAY, android.provider.CalendarContract.Instances.EVENT_LOCATION)
+                contentResolver.query(uri, cols, null, null, android.provider.CalendarContract.Instances.BEGIN + " ASC")?.use { c ->
+                    var n = 0
+                    while (c.moveToNext() && n++ < 80) {
+                        arr.put(JSONObject().put("t", c.getString(0) ?: "(χωρίς τίτλο)").put("s", c.getLong(1)).put("e", c.getLong(2)).put("all", c.getInt(3) == 1).put("loc", c.getString(4) ?: ""))
+                    }
+                }
+            } catch (e: Throwable) { note("calendar failed " + e) }
+            return out.put("events", arr).toString()
+        }
+        @JavascriptInterface fun askCalendar() { main.post { try { requestPermissions(arrayOf(Manifest.permission.READ_CALENDAR), REQ_PERMS) } catch (_: Throwable) {} } }
         @JavascriptInterface fun copyText(text: String) {
             main.post {
                 (getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(android.content.ClipData.newPlainText("JARVIS", text))
