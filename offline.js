@@ -21,6 +21,8 @@ addEventListener('offline', () => Net.update(true));
 const SRClass = window.SpeechRecognition || window.webkitSpeechRecognition;
 async function prepareLocalSpeech() {
   try {
+    // Μέσα στην εφαρμογή Android (WebView) αυτή η λειτουργία του Chrome δεν υποστηρίζεται και τερμάτιζε τη σελίδα.
+    if (window.AndroidJarvis) return;
     if (!SRClass || !SRClass.available || !SRClass.install || !navigator.onLine) return;
     const st = await SRClass.available({ langs: ['el-GR'], processLocally: true });
     if (st === 'downloadable') { const ok = await SRClass.install({ langs: ['el-GR'], processLocally: true }); if (ok) toast('ΦΩΝΗ', 'Κατέβηκε η ελληνική αναγνώριση φωνής για χρήση χωρίς ίντερνετ.', 6000); }
@@ -98,4 +100,4 @@ TABS.push({ k: 'unknown', label: 'ΔΕΝ ΚΑΤΑΛΑΒΑ', get: () => Store.get
   line: (x) => [x.t, new Date(x.at).toLocaleString('el-GR')] });
 
 const baseFIoff = featuresInit;
-window.featuresInit = function () { baseFIoff(); Net.update(false); prepareLocalSpeech(); Standby.arm(); };
+window.featuresInit = function () { baseFIoff(); dn('fi net'); Net.update(false); dn('fi localSpeech'); prepareLocalSpeech(); dn('fi standby'); Standby.arm(); dn('fi done'); };

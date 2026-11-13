@@ -601,7 +601,8 @@ const BOOT_LINES = ['Αρχικοποίηση πυρήνα', 'Φόρτωση ν�
 /* Εκκίνηση που δεν κολλάει: κάθε βήμα προστατεύεται, και ό,τι αποτύχει καταγράφεται και εμφανίζεται. */
 const bootProblems = [];
 let bootStep = '-';
-function bootTry(name, f) { bootStep = name; try { const r = f(); if (r && typeof r.catch === 'function') r.catch((e) => bootProblems.push(name + ': ' + (e && e.message || e))); return r; } catch (e) { bootProblems.push(name + ': ' + (e && e.message || e)); } }
+const dn = (s) => { try { const a = window.AndroidJarvis; if (a && a.diagNote) a.diagNote(String(s)); } catch {} };
+function bootTry(name, f) { bootStep = name; if (!/^line/.test(name)) dn(name); try { const r = f(); if (r && typeof r.catch === 'function') r.catch((e) => bootProblems.push(name + ': ' + (e && e.message || e))); return r; } catch (e) { bootProblems.push(name + ': ' + (e && e.message || e)); } }
 function showHud() { bootStep = 'showHud'; $('#boot').classList.add('hidden'); $('#hud').classList.remove('hidden'); }
 function reportProblems() {
   if (!bootProblems.length) return;

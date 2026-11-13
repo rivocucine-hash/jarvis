@@ -123,7 +123,7 @@ if (A) {
   const wantWake = new URLSearchParams(location.search).get('wake') === '1';
   if (wantWake) history.replaceState(null, '', location.pathname);
   const baseFIn = featuresInit;
-  window.featuresInit = function () { baseFIn(); if (S.wake || S.handsFree) Wake.start(); else Wake.stop(); if (wantWake) setTimeout(onWake, 900); };
+  window.featuresInit = function () { baseFIn(); dn('fi native'); if (S.wake || S.handsFree) Wake.start(); else Wake.stop(); if (wantWake) setTimeout(onWake, 900); };
   setTimeout(() => { if (!booted()) boot(); }, 400);
 
   intents.unshift({ re: /(αδειεσ jarvis|αδειεσ εφαρμογησ|ρυθμισεισ κινητου για jarvis|δεν ανοιγει με τζαρβισ|δεν ξυπναει)/, run: () => { A.openAppSettings(); return 'Άνοιξα τις ρυθμίσεις της εφαρμογής. Ελέγξτε ότι επιτρέπονται: μικρόφωνο, ειδοποιήσεις, «εμφάνιση πάνω από άλλες εφαρμογές», και ότι η μπαταρία δεν περιορίζεται.'; } });
