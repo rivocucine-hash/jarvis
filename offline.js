@@ -69,5 +69,33 @@ const baseSaySb = say;
 say = async function (text, opts = {}) { Standby.flash(opts.speak || text); if (!Standby.on) Standby.arm(); return baseSaySb(text, opts); };
 intents.unshift({ re: /(λειτουργια αναμονησ|κλεισε την οθονη|σβησε την οθονη|μαυρη οθονη|σκοτεινιασε την οθονη|αναμονη)/, run: () => { setTimeout(() => Standby.show(), 2500); return S.handsFree || S.wake ? 'Οθόνη αναμονής. Συνεχίζω να σας ακούω. Αγγίξτε την οθόνη για να επιστρέψετε.' : 'Οθόνη αναμονής. Ενεργοποιήστε τη συνεχή ακρόαση για να με καλείτε με τη φωνή.'; } });
 
+/* ---------- Εγκέφαλος Gemini: οδηγός ρύθμισης & έλεγχος κλειδιού ---------- */
+const GEMINI_URL = 'https://aistudio.google.com/apikey';
+function openKeyField() { $('#settings').classList.remove('hidden'); fillSettings(); setTimeout(() => { const el = document.querySelector('[data-k="geminiKey"]'); if (el) { el.scrollIntoView({ block: 'center' }); el.focus(); } }, 300); }
+async function testGemini() {
+  if (!hasAI()) return;
+  toast('ΕΓΚΕΦΑΛΟΣ', 'Δοκιμή κλειδιού Gemini...', 3000);
+  const out = await askAI('Απάντησε μόνο με μία σύντομη πρόταση: ποιος είσαι;');
+  if (out && !/σφάλμα|Ελέγξτε το κλειδί/.test(out)) { celebrate(false); say(`Ο εγκέφαλος συνδέθηκε. ${out} Τώρα μπορείτε να με ρωτάτε οτιδήποτε.`, { noRelisten: true }); }
+  else { Sound.error(); say(out || 'Δεν μπόρεσα να συνδεθώ με το Gemini. Ελέγξτε ότι αντιγράψατε ολόκληρο το κλειδί και ότι έχετε ίντερνετ.', { noRelisten: true }); }
+}
+const baseFeatSet = window.onFeatureSetting;
+window.onFeatureSetting = (k) => { if (baseFeatSet) baseFeatSet(k); if (['geminiKey', 'aiKey', 'aiProvider', 'aiModel'].includes(k) && hasAI()) { $('#settings').classList.add('hidden'); testGemini(); } };
+intents.unshift(
+  { re: /(ρυθμισε τον εγκεφαλο|βαλε εγκεφαλο|εγκεφαλο gemini|κλειδι gemini|πωσ βαζω (το )?(κλειδι|gemini)|ρυθμιση gemini|συνδεσε το gemini|gemini)/, run: () => {
+    if (hasAI()) { testGemini(); return { silent: true, text: '' }; }
+    return { text: 'Ρύθμιση εγκεφάλου', html: `<b>🧠 Δωρεάν εγκέφαλος Gemini, σε 4 βήματα</b>
+      <div style="margin-top:6px">1. Πατήστε εδώ: <a href="${GEMINI_URL}" target="_blank" rel="noopener">aistudio.google.com/apikey →</a></div>
+      <div>2. Συνδεθείτε με τον λογαριασμό σας Google (το Gmail σας).</div>
+      <div>3. Πατήστε <b>Create API key</b> (Δημιουργία κλειδιού) και μετά <b>Copy</b>.</div>
+      <div>4. Γυρίστε εδώ, πατήστε <b>⚙ → Κλειδί Gemini API</b> και κάντε επικόλληση. Θα το δοκιμάσω αμέσως.</div>
+      <div style="margin-top:6px;opacity:.75">Είναι δωρεάν και δεν ζητάει κάρτα. Το κλειδί μένει μόνο στο κινητό σας.</div>`,
+      speak: 'Σε τέσσερα βήματα. Ένα: πατήστε τον σύνδεσμο στην οθόνη. Δύο: συνδεθείτε με το Google σας. Τρία: πατήστε Create API key και μετά Copy. Τέσσερα: γυρίστε εδώ, ανοίξτε τις ρυθμίσεις και κάντε επικόλληση στο Κλειδί Gemini. Θα το δοκιμάσω αμέσως.' }; } },
+  { re: /(τι δεν καταλαβεσ|τι δεν καταλαβαινεισ|αγνωστεσ εντολεσ|εντολεσ που δεν καταλαβεσ)/, run: () => { const u = Store.get('unknown', []); return u.length ? 'Οι τελευταίες φράσεις που δεν κατάλαβα: ' + u.slice(0, 8).map((x) => `«${x.t}»`).join(', ') + '. Θα τις βρείτε και στα Δεδομένα, καρτέλα «ΔΕΝ ΚΑΤΑΛΑΒΑ».' : 'Δεν υπάρχει κάτι που να μην κατάλαβα. Προς το παρόν!'; } },
+);
+TABS.push({ k: 'unknown', label: 'ΔΕΝ ΚΑΤΑΛΑΒΑ', get: () => Store.get('unknown', []), set: (v) => Store.set('unknown', v),
+  head: () => 'Φράσεις που δεν κατάλαβα. Πείτε τες στον δημιουργό σας για να τις μάθω, ή βάλτε τον εγκέφαλο Gemini (πείτε «ρύθμισε τον εγκέφαλο»).',
+  line: (x) => [x.t, new Date(x.at).toLocaleString('el-GR')] });
+
 const baseFIoff = featuresInit;
 window.featuresInit = function () { baseFIoff(); Net.update(false); prepareLocalSpeech(); Standby.arm(); };

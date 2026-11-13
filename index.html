@@ -252,9 +252,18 @@
 
       <div class="ai-box">
         <div class="ai-title">ΔΩΡΕΑΝ ΚΛΕΙΔΙΑ (προαιρετικά)</div>
-        <p><b>Gemini</b> για ελεύθερη συζήτηση σε οποιοδήποτε θέμα: aistudio.google.com → Get API key.</p>
-        <label>Κλειδί Gemini API<input data-k="geminiKey" type="password" placeholder="AIza..."></label>
+        <p><b>Εγκέφαλος ΤΝ</b>: για να απαντώ σε <b>οποιαδήποτε</b> ερώτηση. Όλες οι επιλογές είναι δωρεάν. Πείτε «ρύθμισε τον εγκέφαλο» για οδηγίες.</p>
+        <label>Εγκέφαλος
+          <select data-k="aiProvider">
+            <option value="gemini">Google Gemini (προτείνεται, το καλύτερο στα ελληνικά)</option>
+            <option value="groq">Groq (δωρεάν, πολύ γρήγορο)</option>
+            <option value="openrouter">OpenRouter (δωρεάν μοντέλα)</option>
+          </select>
+        </label>
+        <label>Κλειδί Gemini API (aistudio.google.com/apikey)<input data-k="geminiKey" type="password" placeholder="AIza..."></label>
         <label>Μοντέλο Gemini<input data-k="model" type="text"></label>
+        <label>Κλειδί Groq / OpenRouter (console.groq.com/keys ή openrouter.ai/keys)<input data-k="aiKey" type="password"></label>
+        <label>Μοντέλο Groq / OpenRouter (κενό = προεπιλογή)<input data-k="aiModel" type="text"></label>
         <p><b>TMDB</b> για τις ταινίες που παίζονται στους κινηματογράφους: themoviedb.org → Λογαριασμός → Ρυθμίσεις → API.</p>
         <label>Κλειδί TMDB (API Key)<input data-k="tmdbKey" type="password"></label>
         <p><b>PageSpeed</b> για αυτόματο έλεγχο ταχύτητας και SEO στα σάιτ σας: console.cloud.google.com → APIs → PageSpeed Insights API → Credentials → API key.</p>

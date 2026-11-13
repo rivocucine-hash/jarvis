@@ -1,5 +1,5 @@
 // Service worker: εγκατάσταση, λειτουργία χωρίς ίντερνετ, αποθήκευση τελευταίων δεδομένων
-const CACHE = 'jarvis-v10';
+const CACHE = 'jarvis-v11';
 const DATA = 'jarvis-data-v1';
 const FONTS = 'jarvis-fonts-v1';
 const SHELL = ['./', './index.html', './style.css', './app.js', './features.js', './life.js', './extra.js', './work.js', './report.js', './backup.js', './offline.js', './manifest.json', './icons/icon-192.png', './icons/icon-512.png'];

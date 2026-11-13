@@ -156,7 +156,7 @@ const goalPct = (g) => (g.steps.length ? Math.round((g.steps.filter((s) => s.don
 function goalsSummary() { if (!goals.length) return 'Δεν έχετε στόχους. Πείτε π.χ. «νέος στόχος να μάθω αγγλικά».'; return goals.map((g) => `${g.title}: ${goalPct(g)}%${g.steps.length ? `, ${g.steps.filter((s) => s.done).length} από ${g.steps.length} βήματα` : ', χωρίς βήματα ακόμα'}`).join('. ') + '.'; }
 function nextStep(g) { const s = g.steps.find((x) => !x.done); return s ? s.t : null; }
 async function aiSteps(title) {
-  if (!S.geminiKey) return null;
+  if (!hasAI()) return null;
   const out = await askAI(`Χώρισε τον στόχο «${title}» σε 4 έως 6 σύντομα, συγκεκριμένα βήματα. Απάντησε ΜΟΝΟ με τα βήματα, ένα ανά γραμμή, χωρίς αρίθμηση.`);
   return out ? out.split('\n').map((x) => x.replace(/^[-•*\d.)\s]+/, '').trim()).filter((x) => x.length > 2).slice(0, 6) : null;
 }
@@ -507,7 +507,7 @@ const L = [
     if (/(τυχαια|οτιδηποτε|εκπληξη)/.test(n)) return Cook.start(pick(RECIPES));
     const found = findRecipes(n);
     if (!found.length) {
-      if (S.geminiKey) { Core.set('thinking'); const ai = await askAI(`Δώσε μου μια απλή ελληνική συνταγή για: ${raw}. Πρώτα τα υλικά σε μία πρόταση, μετά τα βήματα σύντομα.`); if (ai) return ai; }
+      if (hasAI()) { Core.set('thinking'); const ai = await askAI(`Δώσε μου μια απλή ελληνική συνταγή για: ${raw}. Πρώτα τα υλικά σε μία πρόταση, μετά τα βήματα σύντομα.`); if (ai) return ai; }
       const s = [...RECIPES].sort(() => Math.random() - 0.5).slice(0, 3); pending = (r2, nn) => { const i = /(πρωτ|1|ενα)/.test(nn) ? 0 : /(δευτερ|2|δυο)/.test(nn) ? 1 : /(τριτ|3|τρια)/.test(nn) ? 2 : -1; return i >= 0 ? Cook.start(s[i]) : null; };
       return `Δεν βρήκα κάτι ακριβώς γι' αυτό. Προτείνω: 1) ${s[0].n}, 2) ${s[1].n}, 3) ${s[2].n}. Ποιο θέλετε;`;
     }

@@ -16,6 +16,7 @@ const Store = {
 const defaults = {
   userName: '', assistant: 'JARVIS', city: '', voiceURI: '', rate: 1.0, pitch: 0.85,
   sounds: true, hum: false, convo: false, geminiKey: '', model: 'gemini-flash-latest',
+  aiProvider: 'gemini', aiKey: '', aiModel: '',
   cities: 'Αθήνα, Αγρίνιο', weight: 0, wakeTime: '07:00', teams: 'Ολυμπιακός, Παναθηναϊκός', budget: 0, tmdbKey: '',
   wake: false, theme: 'reactor', waterRemind: true, autoBrief: true, lastBrief: '',
 };
@@ -322,11 +323,24 @@ async function notify(title, body) {
 
 /* ---------------- ΕΓΚΕΦΑΛΟΣ ΤΝ (προαιρετικό, δωρεάν Gemini) ---------------- */
 const aiHistory = [];
+const AI_PROVIDERS = {
+  groq: { url: 'https://api.groq.com/openai/v1/chat/completions', model: 'llama-3.3-70b-versatile', name: 'Groq' },
+  openrouter: { url: 'https://openrouter.ai/api/v1/chat/completions', model: 'meta-llama/llama-3.3-70b-instruct:free', name: 'OpenRouter' },
+};
+function hasAI() { const p = S.aiProvider || 'gemini'; return p === 'gemini' ? !!S.geminiKey : !!S.aiKey; }
 async function askAI(text) {
-  if (!S.geminiKey) return null;
+  if (!hasAI()) return null;
   const sys = `Είσαι ο ${S.assistant}, ένας εξαιρετικά ευφυής, ευγενικός και διακριτικά σαρκαστικός προσωπικός βοηθός τεχνητής νοημοσύνης, με ύφος Βρετανού μπάτλερ από το μέλλον. Μιλάς πάντα ελληνικά, στον πληθυντικό ευγενείας. ${S.userName ? 'Ο χρήστης λέγεται ' + S.userName + '.' : ''} Οι απαντήσεις σου είναι σύντομες (1-3 προτάσεις), γιατί διαβάζονται φωναχτά. Μη χρησιμοποιείς markdown, λίστες ή emoji. Σημερινή ημερομηνία και ώρα: ${new Date().toLocaleString('el-GR')}.${window.aiContext ? aiContext() : ''}`;
   aiHistory.push({ role: 'user', parts: [{ text }] }); while (aiHistory.length > 16) aiHistory.shift();
   try {
+    const prov = S.aiProvider || 'gemini';
+    if (prov !== 'gemini') {
+      const P = AI_PROVIDERS[prov]; const messages = [{ role: 'system', content: sys }, ...aiHistory.map((m) => ({ role: m.role === 'model' ? 'assistant' : 'user', content: m.parts.map((x) => x.text).join('') }))];
+      const r2 = await fetch(P.url, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + S.aiKey }, body: JSON.stringify({ model: S.aiModel || P.model, messages, temperature: 0.8, max_tokens: 400 }) });
+      const j2 = await r2.json();
+      if (!r2.ok) { aiHistory.pop(); return `Ο εγκέφαλος ${P.name} επέστρεψε σφάλμα: ${j2.error?.message || r2.status}. Ελέγξτε το κλειδί και το μοντέλο στις ρυθμίσεις.`; }
+      const o2 = (j2.choices?.[0]?.message?.content || '').trim(); if (o2) aiHistory.push({ role: 'model', parts: [{ text: o2 }] }); return o2 || null;
+    }
     const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(S.model || defaults.model)}:generateContent`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': S.geminiKey },
       body: JSON.stringify({ system_instruction: { parts: [{ text: sys }] }, contents: aiHistory, generationConfig: { temperature: 0.8, maxOutputTokens: 400 } }),
@@ -370,7 +384,7 @@ const intents = [
   { re: /(βοηθεια|τι μπορεισ|τι ξερεισ να κανεισ|εντολεσ|δυνατοτητεσ)/, run: () => ({ text: 'Να τι μπορώ να κάνω για εσάς:', html: helpHtml(), speak: 'Μπορώ να σας πω την ώρα και τον καιρό, να βάλω χρονόμετρα, ξυπνητήρια και υπενθυμίσεις, να κρατάω σημειώσεις και λίστα, να κάνω υπολογισμούς και μετατροπές νομισμάτων, να ψάχνω στη Βικιπαίδεια και στο Google, να ανοίγω το YouTube, χάρτες και εφαρμογές, και να καλώ αριθμούς. Δείτε τη λίστα στην οθόνη.' }) },
 
   // ώρα / ημερομηνία
-  { re: /(τι ωρα|ωρα ειναι|πεσ μου την ωρα|την ωρα)/, run: () => { const d = new Date(); return pick([`Η ώρα είναι ${d.getHours()}:${pad(d.getMinutes())}.`, `Είναι ${d.getHours()}:${pad(d.getMinutes())}${nmc()}.`]); } },
+  { re: /(τι ωρα|ωρα ειναι|πεσ μου την ωρα|την ωρα)/, test: (n) => !/ωρα(?: ειναι)?\s+(στη|στο|στην|στον|στα|στισ)\s/.test(n), run: () => { const d = new Date(); return pick([`Η ώρα είναι ${d.getHours()}:${pad(d.getMinutes())}.`, `Είναι ${d.getHours()}:${pad(d.getMinutes())}${nmc()}.`]); } },
   { re: /(τι μερα|ημερομηνια|ποσεσ του μηνα|τι ημερα|ποσεσ εχουμε|σημερα ειναι)/, run: () => { const d = new Date(); return `Σήμερα είναι ${DAYS[d.getDay()]}, ${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}.`; } },
 
   // καιρός
@@ -410,7 +424,7 @@ const intents = [
   // σημειώσεις
   { re: /(σβησε|διεγραψε|καθαρισε).*(σημειωσ)/, run: () => { notes = []; Store.set('notes', notes); renderMem(); return 'Οι σημειώσεις διαγράφηκαν. Σαν να μην υπήρξαν ποτέ.'; } },
   { re: /(διαβασε|ποιεσ|δειξε|τι).*(σημειωσ)/, run: () => notes.length ? `Έχετε ${notes.length} ${notes.length === 1 ? 'σημείωση' : 'σημειώσεις'}: ` + notes.map((x, i) => `${i + 1}) ${x.text}`).join('. ') : 'Δεν έχετε σημειώσεις ακόμα. Πείτε «σημείωσε» και ό,τι θέλετε.' },
-  { re: /^(σημειωσε|κρατα σημειωση|γραψε|σημειωση|κρατα)\s+(?:οτι\s+)?(.+)/, run: (raw, n, m) => { const t = raw.split(/\s+/).slice(-m[2].split(' ').length).join(' '); notes.unshift({ text: t, at: Date.now() }); Store.set('notes', notes); renderMem(); return pick(['Σημειώθηκε.', 'Αποθηκεύτηκε στη μνήμη.', 'Το κράτησα.']); } },
+  { re: /^(σημειωσε(?: μου)?|κρατα σημειωση|γραψε σημειωση|γραψε (?:μου )?οτι|σημειωση|κρατα (?:μου )?οτι)\s+(?:οτι\s+)?(.+)/, run: (raw, n, m) => { const t = raw.split(/\s+/).slice(-m[2].split(' ').length).join(' '); notes.unshift({ text: t, at: Date.now() }); Store.set('notes', notes); renderMem(); return pick(['Σημειώθηκε.', 'Αποθηκεύτηκε στη μνήμη.', 'Το κράτησα.']); } },
 
   // λίστα
   { re: /(σβησε|καθαρισε|αδειασε).*(λιστα)/, run: () => { todos = []; Store.set('todos', todos); renderMem(); return 'Η λίστα καθάρισε.'; } },
@@ -419,7 +433,7 @@ const intents = [
 
   // μπαταρία / διαγνωστικά
   { re: /(μπαταρια|φορτιση|ενεργεια)/, run: () => battery ? `Η μπαταρία είναι στο ${Math.round(battery.level * 100)}%${battery.charging ? ' και φορτίζει' : ''}.${battery.level < 0.2 && !battery.charging ? ' Συνιστώ φορτιστή, το συντομότερο.' : ''}` : 'Ο browser δεν μου επιτρέπει να δω την μπαταρία σε αυτή τη συσκευή.' },
-  { re: /(διαγνωστικ|κατασταση συστηματ|ελεγχοσ συστηματ|συστηματα)/, run: () => `Διαγνωστικός έλεγχος: σύνδεση ${navigator.onLine ? 'ενεργή' : 'εκτός'}, φωνή ${Voice.voices.length ? 'ενεργή' : 'μη διαθέσιμη'}, μνήμη ${notes.length} σημειώσεις και ${todos.length} εργασίες, εγκέφαλος ΤΝ ${S.geminiKey ? 'συνδεδεμένος' : 'σε τοπική λειτουργία'}. Όλα εντός παραμέτρων.` },
+  { re: /(διαγνωστικ|κατασταση συστηματ|ελεγχοσ συστηματ|συστηματα)/, run: () => `Διαγνωστικός έλεγχος: σύνδεση ${navigator.onLine ? 'ενεργή' : 'εκτός'}, φωνή ${Voice.voices.length ? 'ενεργή' : 'μη διαθέσιμη'}, μνήμη ${notes.length} σημειώσεις και ${todos.length} εργασίες, εγκέφαλος ΤΝ ${hasAI() ? 'συνδεδεμένος' : 'σε τοπική λειτουργία'}. Όλα εντός παραμέτρων.` },
 
   // νομίσματα
   { re: /(δολαρι|λιρα|ισοτιμια|φραγκ|γιεν|συναλλαγμα|ευρω σε|σε ευρω)/, run: async (raw, n) => {
@@ -490,7 +504,7 @@ async function wiki(q) {
 function escapeHtml(s) { return s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 function helpHtml() {
   const L = [['◷', 'Ώρα & ημερομηνία', '«Τι ώρα είναι;»'], ['☁', 'Καιρός', '«Καιρός αύριο στη Θεσσαλονίκη»'], ['⧗', 'Χρονόμετρο', '«Χρονόμετρο 10 λεπτά»'], ['⏰', 'Ξυπνητήρι', '«Ξύπνησέ με στις 7:30»'], ['🔔', 'Υπενθύμιση', '«Θύμισέ μου σε 20 λεπτά να φάω»'], ['✎', 'Σημειώσεις', '«Σημείωσε ότι...»'], ['☰', 'Λίστα', '«Πρόσθεσε γάλα και ψωμί στη λίστα»'], ['∑', 'Υπολογισμοί', '«Πόσο κάνει 15% του 80»'], ['€', 'Νομίσματα', '«50 ευρώ σε δολάρια»'], ['📖', 'Γνώσεις', '«Τι είναι μαύρη τρύπα»'], ['🔍', 'Google', '«Ψάξε συνταγή για μουσακά»'], ['▶', 'YouTube', '«Παίξε μουσική για διάβασμα»'], ['🗺', 'Χάρτες', '«Πήγαινέ με στο αεροδρόμιο»'], ['📞', 'Κλήση', '«Πάρε τηλέφωνο 69...»'], ['⚡', 'Συστήματα', '«Μπαταρία», «Διαγνωστικά»'], ['🎲', 'Διασκέδαση', '«Ανέκδοτο», «Ζάρι», «Στρίψε κέρμα»']];
-  return 'Να τι μπορώ να κάνω για εσάς:<br>' + L.map((x) => `<div style="margin-top:5px">${x[0]} <b>${x[1]}</b> — <span style="opacity:.75">${x[2]}</span></div>`).join('') + (S.geminiKey ? '' : '<div style="margin-top:8px;opacity:.75">💡 Για ελεύθερη συζήτηση σε οτιδήποτε, προσθέστε δωρεάν κλειδί Gemini στις ρυθμίσεις.</div>');
+  return 'Να τι μπορώ να κάνω για εσάς:<br>' + L.map((x) => `<div style="margin-top:5px">${x[0]} <b>${x[1]}</b> — <span style="opacity:.75">${x[2]}</span></div>`).join('') + (hasAI() ? '' : '<div style="margin-top:8px;opacity:.75">💡 Για ελεύθερη συζήτηση σε οτιδήποτε, προσθέστε δωρεάν κλειδί Gemini στις ρυθμίσεις.</div>');
 }
 
 /* ---------------- ROUTER ---------------- */
@@ -518,10 +532,15 @@ async function handle(raw) {
   // fallback
   const ai = await askAI(raw);
   if (ai) return respond(ai);
-  // τελευταία προσπάθεια: βικιπαίδεια
-  if (n2.split(' ').length <= 4) { const w = await wiki(raw2); if (w) return respond(w); }
+  // τελευταία προσπάθεια: βικιπαίδεια, αφού αφαιρεθούν οι λέξεις ερώτησης
+  const core = raw2.replace(/[;?]/g, '').split(/\s+/).filter((w) => !/^(πες|πείτε|μου|μας|τι|τί|πώς|πως|ποιος|ποια|ποιο|ποιοι|πού|που|πότε|γιατί|ξέρεις|μπορείς|να|είναι|ήταν|ο|η|το|οι|τα|τον|την|της|του|των|για|σχετικά|με|ένα|μια|λίγα|κάτι|εξήγησε|εξηγήστε)$/i.test(w)).join(' ');
+  if (core && core.split(' ').length <= 3) { const w = await wiki(core); if (w) return respond(w); }
+  try { const u = Store.get('unknown', []); u.unshift({ t: raw, at: Date.now() }); Store.set('unknown', u.slice(0, 50)); } catch {}
   Sound.error();
-  respond({ text: pick([`Δεν είμαι βέβαιος ότι κατάλαβα${nmc()}.`, 'Αυτό ξεφεύγει από τα τρέχοντα πρωτόκολλά μου.', 'Συγγνώμη, δεν το έπιασα αυτό.']) + ' Θέλετε να το ψάξω στο Google;' });
+  if (!hasAI()) {
+    respond({ text: 'Δεν το έπιασα αυτό.', html: `Δεν το έπιασα αυτό${nmc()}. Για να απαντάω σε <b>οποιαδήποτε ερώτηση</b>, χρειάζομαι τον δωρεάν «εγκέφαλο» Gemini. Πείτε <b>«ρύθμισε τον εγκέφαλο»</b> και σας δείχνω πώς, σε 2 λεπτά. Ή να το ψάξω στο Google;`,
+      speak: `Δεν το έπιασα αυτό. Για να απαντάω σε οποιαδήποτε ερώτηση, χρειάζομαι τον δωρεάν εγκέφαλο Gemini. Πείτε «ρύθμισε τον εγκέφαλο» για να σας δείξω πώς. Ή θέλετε να το ψάξω στο Google;` });
+  } else respond({ text: (navigator.onLine ? pick([`Δεν είμαι βέβαιος ότι κατάλαβα${nmc()}.`, 'Συγγνώμη, δεν το έπιασα αυτό.']) : 'Χωρίς ίντερνετ δεν μπορώ να ρωτήσω τον εγκέφαλο Gemini.') + ' Θέλετε να το ψάξω στο Google;' });
   pending = (r, nn) => { if (/^(ναι|ναι ψαξε|ok|οκ|εντανει|βεβαια|ψαξε το)/.test(nn)) { setTimeout(() => openUrl('https://www.google.com/search?q=' + encodeURIComponent(raw)), 800); return 'Αναζητώ.'; } return null; };
 }
 async function respond(out) {
