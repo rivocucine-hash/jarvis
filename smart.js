@@ -229,3 +229,9 @@ function dictate(kind) {
   return `${D.ask} Όταν τελειώσετε, πείτε «τέλος».`;
 }
 intents.unshift({ re: /^(θελω να (γεμισω|συμπληρωσω|γραψω|βαλω|περασω|σου πω)|να (γεμισω|συμπληρωσω|περασω|σου πω)|γεμισε|συμπληρωσε|περασε|ασ γεμισουμε|ασ συμπληρωσουμε|παμε να γεμισουμε|να σου πω) (.+)$/, test: (n) => TAB_WORDS.some(([k, re]) => DICT[k] && re.test(n)), run: (raw, n) => dictate(TAB_WORDS.find(([k, re]) => DICT[k] && re.test(n))[0]) });
+
+/* Όσο γράφετε, το πεδίο εντολής μένει στην κορυφή της οθόνης (πάνω από το πληκτρολόγιο). */
+(() => { const inp = document.getElementById('textInput'); if (!inp) return; let t = null;
+  inp.addEventListener('focus', () => { clearTimeout(t); document.body.classList.add('typing'); });
+  inp.addEventListener('blur', () => { t = setTimeout(() => document.body.classList.remove('typing'), 250); });
+})();

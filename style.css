@@ -261,3 +261,7 @@ body.night #hud{filter:brightness(.78) saturate(.85);transition:filter 2s}
 body.native .native-only{display:inline-block}
 .wakelog{white-space:pre-wrap;word-break:break-word;font-family:ui-monospace,monospace;font-size:11px;line-height:1.45;color:var(--text);background:rgba(0,0,0,.35);border:1px solid var(--line);padding:8px;margin:8px 0;max-height:46vh;overflow:auto}
 .wakecopy{padding:9px 12px;background:transparent;border:1px solid var(--cyan);color:var(--cyan);font-family:var(--mono);font-size:10px;letter-spacing:.15em}
+
+/* Γράψιμο: το πεδίο ανεβαίνει στην κορυφή της οθόνης, ώστε το πληκτρολόγιο να μην το καλύπτει ποτέ */
+body.typing .input-bar{position:fixed;top:calc(env(safe-area-inset-top,0px) + 8px);left:8px;right:8px;z-index:80;background:var(--bg);padding:8px;border:1px solid var(--cyan);box-shadow:var(--glow)}
+body.typing .input-bar input{font-size:18px;padding:14px}

@@ -54,7 +54,7 @@ if (A) {
       if (my !== speakToken) return;
       await speakOne(parts[i]);
       if (my !== speakToken) return;
-      if (i < parts.length - 1) await sleep(/[:,]$/.test(parts[i]) ? 180 : 380);
+      if (i < parts.length - 1) await sleep(/[:,]$/.test(parts[i]) ? 120 : 260);
     }
     if (my !== speakToken) return;
     bargeOff();
@@ -63,7 +63,9 @@ if (A) {
 
   /* ---------- Διακοπή με τη φωνή: αν μιλήσετε όσο μιλάω, σταματώ και σας ακούω ---------- */
   let bargeAt = 0, bargeFalse = 0;
-  function bargeOn() { if (S.bargeIn === false || !A.bargeStart) return; try { A.bargeStart(S.bargeSens || 2); } catch {} }
+  // Κλειστή από προεπιλογή: κρατά το μικρόφωνο όσο μιλάω και σε κάποια κινητά καθυστερεί ή μπλοκάρει την επόμενη ακρόαση.
+  if (!S.bargeResetV1) { S.bargeResetV1 = true; S.bargeIn = false; saveSettings(); }
+  function bargeOn() { if (S.bargeIn !== true || !A.bargeStart) return; try { A.bargeStart(S.bargeSens || 2); } catch {} }
   function bargeOff() { if (!A.bargeStop) return; try { A.bargeStop(); } catch {} }
   window.__nativeBarge = () => {
     if (!Voice.speakingNow) return;
@@ -87,7 +89,7 @@ if (A) {
   // Ταχύτητα: μόλις η φράση μείνει ίδια για 0,9″, θεωρούμε ότι τελειώσατε και δεν περιμένουμε το κινητό να το αποφασίσει.
   let quickEnd = null;
   window.__nativeStt = (t, fin) => { $('#interim').textContent = t; clearTimeout(quickEnd); if (fin) finalText = t; else if (t) { partialText = t; quickEnd = setTimeout(() => { if (Voice.listening && partialText === t) { try { A.stopListen(); } catch {} } }, 900); } };
-  let sttHelpShown = 0;
+  let sttHelpShown = 0, sttRetryAt = 0;
   window.__nativeSttError = (code) => {
     // 100+: η διαδικτυακή αναγνώριση απέτυχε και απέτυχε και η δεύτερη προσπάθεια πάνω στο κινητό.
     if (code >= 100) {
@@ -98,6 +100,12 @@ if (A) {
         else toast('ΑΚΡΟΑΣΗ', 'Η αναγνώριση φωνής δεν απάντησε. Δοκιμάστε ξανά ή γράψτε την εντολή.', 4000);
         return;
       }
+    }
+    // 3 (ήχος), 5 (πελάτης), 8 (απασχολημένο): το μικρόφωνο δεν ήταν ελεύθερο. Μία αυτόματη επανάληψη· αν ξανασυμβεί, το λέμε.
+    if (code === 3 || code === 5 || code === 8 || code === 103 || code === 105 || code === 108) {
+      if (Date.now() - sttRetryAt > 6000) { sttRetryAt = Date.now(); setTimeout(() => { if (!Voice.listening && !Voice.speakingNow) A.listen(); }, 600); }
+      else toast('ΑΚΡΟΑΣΗ', `Το μικρόφωνο δεν ήταν διαθέσιμο (κωδικός ${code}). Πατήστε ξανά τον αντιδραστήρα.`, 5000);
+      return;
     }
     // 6/7: δεν ακούστηκε ή δεν αναγνωρίστηκε ομιλία. Αν δεν υπάρχει ούτε μισή φράση, το λέμε (όχι συνέχεια).
     if ((code === 6 || code === 7) && !partialText && ++missCount <= 2) { toast('ΑΚΡΟΑΣΗ', 'Δεν σας άκουσα καθαρά. Πατήστε τον αντιδραστήρα και μιλήστε μόλις ακουστεί ο ήχος.', 4000); }
