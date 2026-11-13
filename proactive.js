@@ -31,7 +31,7 @@ const Proactive = {
     S.lastBrief = new Date().toDateString(); saveSettings();
     // Η ενημέρωση λέγεται μόνο αν τη ζητήσει ο χρήστης.
     pending = async (raw, nn) => (/^(ναι|οκ|ok|ενταξει|βεβαια|πεσ|πεσ μου|πεσ τα|ακουω|θελω|αμε)/.test(nn) ? (morningBriefing(), { silent: true, text: '' }) : /^(οχι|αργοτερα|ασε|ασ το|μη)/.test(nn) ? 'Όπως επιθυμείτε. Πείτε «καλημέρα» όποτε τη θέλετε.' : null);
-    await say(`Καλημέρα${nmc()}. Ώρα να ξυπνήσετε. Πείτε «ναι» αν θέλετε την ενημέρωση της ημέρας.`);
+    await say(`${hello()}${nmc()}. Ώρα να ξυπνήσετε. Πείτε «ναι» αν θέλετε την ενημέρωση της ημέρας.`);
   },
   tick() {
     const d = new Date(), day = todayKey(), now = `${pad(d.getHours())}:${pad(d.getMinutes())}`, h = d.getHours();

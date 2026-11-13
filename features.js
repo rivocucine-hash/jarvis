@@ -683,7 +683,7 @@ async function morningBriefing(opts = {}) {
   S.lastBrief = todayKey(); saveSettings(); touchDay();
   const d = new Date(), html = [], sp = [];
   const add = (icon, text) => { html.push(`<div style="margin-top:5px">${icon} ${escapeHtml(text)}</div>`); sp.push(text); };
-  const head = `${d.getHours() < 12 ? 'Καλημέρα' : hello()}${nmc()}. Σήμερα είναι ${fmtDate(d)} ${d.getFullYear()}, και η ώρα ${hm(d)}.`;
+  const head = `${hello()}${nmc()}. Σήμερα είναι ${fmtDate(d)} ${d.getFullYear()}, και η ώρα ${hm(d)}.`;
   Core.set('thinking'); Sound.think();
   const cities = (S.cities || '').split(',').map((c) => c.trim()).filter(Boolean);
   const ws = await Promise.all(cities.map((c) => getWeather(c).catch(() => null)));

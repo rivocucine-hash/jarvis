@@ -140,3 +140,7 @@ window.briefingExtras = async (add, d) => {
   if (baseExtrasSm) await baseExtrasSm(add, d);
   try { const ev = calEvents(1); if (Array.isArray(ev)) { const d0 = new Date(); d0.setHours(24, 0, 0, 0); const t = ev.filter((e) => e.s < d0.getTime()); if (t.length) add(`Στο ημερολόγιό σας σήμερα: ${t.map((e) => (e.all ? '' : hmOf(e.s) + ' ') + e.t).join(', ')}.`); } } catch {}
 };
+
+/* Πεδίο γραφής: όταν ανοίγει το πληκτρολόγιο, το πεδίο έρχεται σε ορατό σημείο. */
+document.addEventListener('focusin', (e) => { const t = e.target; if (t && /^(INPUT|TEXTAREA)$/.test(t.tagName)) setTimeout(() => { try { t.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch {} }, 350); });
+if (window.visualViewport) visualViewport.addEventListener('resize', () => { const t = document.activeElement; if (t && /^(INPUT|TEXTAREA)$/.test(t.tagName)) { try { t.scrollIntoView({ block: 'center' }); } catch {} } });

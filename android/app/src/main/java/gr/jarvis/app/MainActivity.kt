@@ -79,7 +79,19 @@ class MainActivity : Activity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
         web = WebView(this)
-        setContentView(web)
+        // Όταν ανοίγει το πληκτρολόγιο, η σελίδα μικραίνει ώστε το πεδίο γραφής να μένει ορατό πάνω από αυτό.
+        val root = android.widget.FrameLayout(this)
+        root.setBackgroundColor(0xFF02070D.toInt())
+        root.addView(web, android.widget.FrameLayout.LayoutParams(android.widget.FrameLayout.LayoutParams.MATCH_PARENT, android.widget.FrameLayout.LayoutParams.MATCH_PARENT))
+        setContentView(root)
+        if (Build.VERSION.SDK_INT >= 30) {
+            root.setOnApplyWindowInsetsListener { v, insets ->
+                val ime = insets.getInsets(android.view.WindowInsets.Type.ime()).bottom
+                v.setPadding(0, 0, 0, ime)
+                if (ime > 0) js("(function(){var e=document.activeElement;if(e&&e.scrollIntoView)setTimeout(function(){e.scrollIntoView({block:'center'})},150)})()")
+                insets
+            }
+        }
         web.setBackgroundColor(0xFF02070D.toInt())
         web.settings.apply {
             javaScriptEnabled = true
