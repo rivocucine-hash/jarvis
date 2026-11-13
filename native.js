@@ -64,13 +64,14 @@ if (A) {
   /* ---------- Διακοπή με τη φωνή: αν μιλήσετε όσο μιλάω, σταματώ και σας ακούω ---------- */
   let bargeAt = 0, bargeFalse = 0;
   // Κλειστή από προεπιλογή: κρατά το μικρόφωνο όσο μιλάω και σε κάποια κινητά καθυστερεί ή μπλοκάρει την επόμενη ακρόαση.
-  if (!S.bargeResetV1) { S.bargeResetV1 = true; S.bargeIn = false; saveSettings(); }
+  if (!S.bargeResetV2) { S.bargeResetV2 = true; S.bargeResetV1 = true; S.bargeIn = true; S.bargeSens = 2; saveSettings(); }
   function bargeOn() { if (S.bargeIn !== true || !A.bargeStart) return; try { A.bargeStart(S.bargeSens || 2); } catch {} }
   function bargeOff() { if (!A.bargeStop) return; try { A.bargeStop(); } catch {} }
   window.__nativeBarge = () => {
     if (!Voice.speakingNow) return;
     bargeAt = Date.now(); speechSynthesis.cancel(); Sound.listen();
-    lastVoiceCmd = Date.now(); setTimeout(() => { if (!Voice.listening) A.listen(); }, 120);
+    // Μικρή αναμονή ώστε το μικρόφωνο να ελευθερωθεί πριν το πάρει η αναγνώριση φωνής.
+    lastVoiceCmd = Date.now(); try { A.bargeStop(); } catch {} setTimeout(() => { if (!Voice.listening) A.listen(); }, 450);
   };
   intents.unshift(
     { re: /(ποσο αργησεσ|γιατι αργεισ|ποσο χρονο εκανεσ|δειξε χρονουσ|δειξε μου χρονουσ)/, run: () => { S.showTimes = true; saveSettings(); const t = window.__times; return `Στην τελευταία εντολή: ακρόαση ${t.listen.toFixed(1)} δευτερόλεπτα, επεξεργασία ${t.think.toFixed(1)}. Από εδώ και πέρα θα δείχνω τους χρόνους στην οθόνη μετά από κάθε εντολή. Πείτε «κρύψε χρόνους» για να σταματήσω.`; } },
@@ -117,7 +118,8 @@ if (A) {
     Voice.listening = false; $('#interim').textContent = ''; if (Core.state === 'listening') Core.set('idle'); Sound.stop();
     // Αν το κινητό δεν έδωσε τελικό κείμενο, κρατάμε ό,τι είχε ακούσει ως εκείνη τη στιγμή.
     const t = (finalText || partialText).trim(); finalText = ''; partialText = '';
-    if (t) { missCount = 0; if (Date.now() - bargeAt < 15000) bargeFalse = 0; lastVoiceCmd = Date.now(); tHeard = Date.now(); T.listen = tStart ? (tHeard - tStart) / 1000 : 0; handle(t); }
+    if (t && Date.now() - bargeAt < 8000 && t.split(/\s+/).length === 1 && !/^(ναι|οχι|όχι|οκ|ok|τέλος|τελος|άλλο|αλλο)$/i.test(t)) { bargeFalse = 0; bargeAt = 0; try { closeAll(); } catch {} addMsg('ai', '■ Σταμάτησα.'); A.wakeDone(); }
+    else if (t) { missCount = 0; if (Date.now() - bargeAt < 15000) bargeFalse = 0; lastVoiceCmd = Date.now(); tHeard = Date.now(); T.listen = tStart ? (tHeard - tStart) / 1000 : 0; handle(t); }
     else {
       // Διακοπή χωρίς λόγια = λάθος συναγερμός (άκουσα τη δική μου φωνή). Μετά από 2, γίνομαι λιγότερο ευαίσθητος· στο ελάχιστο, την κλείνω.
       if (Date.now() - bargeAt < 15000 && ++bargeFalse >= 2) { bargeFalse = 0; if ((S.bargeSens || 2) > 1) { S.bargeSens = (S.bargeSens || 2) - 1; saveSettings(); } else { S.bargeIn = false; saveSettings(); toast('ΔΙΑΚΟΠΗ', 'Η διακοπή με τη φωνή έκλεισε, γιατί σε αυτό το κινητό άκουγα τη δική μου φωνή. Πείτε «να διακόπτεσαι» για να την ξανανοίξετε.', 9000); } }

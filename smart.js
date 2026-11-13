@@ -235,3 +235,33 @@ intents.unshift({ re: /^(θελω να (γεμισω|συμπληρωσω|γρα
   inp.addEventListener('focus', () => { clearTimeout(t); document.body.classList.add('typing'); });
   inp.addEventListener('blur', () => { t = setTimeout(() => document.body.classList.remove('typing'), 250); });
 })();
+
+/* Καταχώρηση με μία φράση: «ενημέρωσε τα φάρμακα, βάλε το ω3 δύο το μεσημέρι και τέλος», «βάλε στα ψώνια γάλα και ψωμί». */
+const NUM_WORDS = [['ενα', 1], ['μια', 1], ['μια', 1], ['δυο', 2], ['δυο', 2], ['τρια', 3], ['τρεισ', 3], ['τεσσερα', 4]];
+intents.unshift({
+  re: /^(ενημερωσε|βαλε|προσθεσε|γραψε|περασε|σημειωσε|καταχωρησε|να βαλεισ|να προσθεσεισ|θελω να βαλεισ|θελω να προσθεσεισ)\s+(.+)$/,
+  test: (n) => { const k = TAB_WORDS.find(([key, re]) => DICT[key] && re.test(n.split(' ').slice(0, 7).join(' '))); return !!k && !/(μουσικ|ξυπνητηρ|υπενθυμισ|στη λιστα$)/.test(n); },
+  run: (raw, n) => {
+    const [kind, re] = TAB_WORDS.find(([key, r]) => DICT[key] && r.test(n.split(' ').slice(0, 7).join(' ')));
+    // κρατάμε ό,τι ειπώθηκε μετά τη λέξη της κατηγορίας (ή πριν, αν η κατηγορία είναι στο τέλος: «βάλε γάλα στα ψώνια»)
+    const words = raw.replace(/[,.;]/g, ' ').split(/\s+/).filter(Boolean), nw = words.map((w) => norm(w));
+    const ci = nw.findIndex((w) => re.test(w));
+    let rest = words.slice(ci + 1), before = words.slice(1, ci).filter((w) => !/^(στα|στις|στισ|στη|στην|στο|για|τα|τις|τισ|τη|την|το|των|και|μου|να)$/i.test(norm(w)));
+    const clean = (arr) => { let a = arr.slice(); if (a.length > 2 && norm(a[0]) === 'να' && /^(βαλεισ|προσθεσεισ|γραψεισ|περασεισ)$/.test(norm(a[1]))) a.shift(); while (a.length > 1 && /^(και|βαλε|βαλεισ|προσθεσε|προσθεσεισ|γραψε|γραψεισ|περασε|περασεισ|το|τα|τη|την|τον|οτι|μου|ενα|μια)$/.test(norm(a[0]))) a.shift(); while (a.length && /^(τελοσ|και|αυτα|ευχαριστω|παρακαλω)$/.test(norm(a[a.length - 1]))) a.pop(); return a; };
+    rest = clean(rest); if (!rest.length) rest = clean(before);
+    if (!rest.length) return dictate(kind);
+    let text = rest.join(' ');
+    if (kind === 'pills') {
+      // «ω3 δύο το μεσημέρι» → όνομα «Ω3», δόση 2, ώρα μεσημέρι
+      const m = norm(text).match(/^(.+?)\s+(\d+|ενα|μια|δυο|τρια|τρεισ|τεσσερα)(\s+(χαπια|χαπι|καψουλεσ|καψουλα|κουταλιεσ|σταγονεσ|φορεσ))?\s+(στισ|το πρωι|το μεσημερι|το βραδυ|το απογευμα|πρωι|μεσημερι|βραδυ|καθε)/);
+      if (m) { const q = /^\d+$/.test(m[2]) ? +m[2] : (NUM_WORDS.find(([w]) => w === m[2]) || [0, 1])[1]; const nameLen = m[1].split(' ').length; const parts = text.split(/\s+/); const nm0 = parts.slice(0, nameLen).join(' '); const tail = parts.slice(nameLen + 1 + (m[3] ? 1 : 0)).join(' '); text = `${nm0}${q > 1 ? ' x' + q : ''} ${tail}`; }
+    }
+    let added = []; try { added = DICT[kind].add(text) || []; } catch (e) { console.error(e); }
+    try { renderMem(); } catch {}
+    return added.length ? `Το πέρασα ${DICT[kind].name}${nmc()}: ${added.join(', ')}.` : dictate(kind);
+  },
+});
+intents.unshift({ re: /(τι σφαλμα (εβγαλε|ειχε|εχει) ο εγκεφαλοσ|σφαλμα εγκεφαλου|γιατι δεν απανταει ο εγκεφαλοσ)/, run: () => { const e = window.lastAiError || Store.get('lastAiError', null); return e ? { private: true, text: 'Σφάλμα εγκεφάλου', html: `<b>Τελευταίο σφάλμα εγκεφάλου</b><br>Ώρα: ${new Date(e.at).toLocaleString('el-GR')}<br>Κωδικός: ${escapeHtml(String(e.status))}<br>Μοντέλο: ${escapeHtml(String(e.model))}<br>Μήνυμα: ${escapeHtml(e.message || '-')}`, speak: `Το τελευταίο σφάλμα είχε κωδικό ${e.status}. Το έγραψα στην οθόνη.` } : 'Δεν έχω καταγράψει σφάλμα του εγκεφάλου.'; } });
+
+/* «Σταμάτα» με όποια λόγια κι αν ειπωθεί («σταμάτα τώρα», «στοπ παρακαλώ», «σταμάτα να μιλάς»): σταματά τα πάντα, χωρίς απάντηση. */
+intents.unshift({ re: /^(σταματα|σταματησε|σταματηστε|στοπ|stop|παψε|σωπα|σκασε|ησυχια|φτανει|αρκετα|τερματισε|διακοψε)( .{0,28})?$/, test: (n) => !/(μουσικ|χρονομετρ|υπενθυμ|ακου|ξυπν|πρωτοβουλ|διακοπη|παρτι|ημερολογ|εγκεφαλ)/.test(n), run: () => { closeAll(); pending = null; return { silent: true, text: '■ Σταμάτησα.' }; } });

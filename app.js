@@ -405,10 +405,23 @@ async function askAI(text) {
       if (r.status === 429 || r.status === 401 || r.status === 403) break; // όριο χρήσης ή πρόβλημα κλειδιού: δεν έχει νόημα η επανάληψη
       if (tries[i][1] && /thinking/i.test(j.error?.message || '')) { S.aiNoFast = true; saveSettings(); }
     }
+    // Υπερφόρτωση ή προσωρινό πρόβλημα του Gemini (5xx, λήξη χρόνου): μία ακόμη προσπάθεια με το ελαφρύτερο μοντέλο.
+    if (!r.ok && (r.status === 0 || r.status >= 500)) {
+      await sleep(900);
+      try {
+        const r3 = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent`, { signal: AbortSignal.timeout ? AbortSignal.timeout(12000) : undefined, method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': S.geminiKey },
+          body: JSON.stringify({ system_instruction: { parts: [{ text: sys }] }, contents: lastOnly, generationConfig: { temperature: 0.8, maxOutputTokens: 900 } }) });
+        const j3 = await r3.json().catch(() => ({})); if (r3.ok) { r = r3; j = j3; }
+      } catch {}
+    }
     if (!r.ok) {
       aiHistory.pop();
+      // Το τεχνικό μήνυμα κρατιέται για διάγνωση («τι σφάλμα έβγαλε ο εγκέφαλος»), δεν εκφωνείται.
+      window.lastAiError = { at: Date.now(), status: r.status, message: String(j.error?.message || '').slice(0, 300), model: S.model || defaults.model };
+      try { Store.set('lastAiError', window.lastAiError); } catch {}
       if (r.status === 429) return 'Ο δωρεάν εγκέφαλος έφτασε το όριο ερωτήσεων για αυτό το λεπτό. Δοκιμάστε ξανά σε λίγο.';
-      return `Ο εγκέφαλος ΤΝ επέστρεψε σφάλμα: ${j.error?.message || r.status}. Ελέγξτε το κλειδί και το μοντέλο στις ρυθμίσεις.`;
+      if (r.status === 401 || r.status === 403 || /api key/i.test(j.error?.message || '')) return 'Ο εγκέφαλος δεν δέχεται το κλειδί. Πείτε «ρύθμισε τον εγκέφαλο» για να το βάλουμε ξανά.';
+      return `Ο εγκέφαλος δεν απάντησε αυτή τη στιγμή (κωδικός ${r.status || 'χρόνου'}). Δοκιμάστε ξανά σε λίγο.`;
     }
     const out = (j.candidates?.[0]?.content?.parts || []).map((p) => p.text || '').join('').trim();
     if (out) aiHistory.push({ role: 'model', parts: [{ text: out }] });
