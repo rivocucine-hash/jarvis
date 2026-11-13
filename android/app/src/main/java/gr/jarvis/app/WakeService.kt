@@ -75,6 +75,8 @@ class WakeService : Service(), RecognitionListener {
             Log.e(TAG, "foreground", e); CrashLog.note(this, "WakeService.startForeground", e); stopSelf(); return
         }
         running = true
+        // Σημάδι «ξεκινάει η ακρόαση»: αν η εφαρμογή κλείσει πριν σβηστεί, την επόμενη φορά η ακρόαση απενεργοποιείται.
+        getSharedPreferences("jarvis", Context.MODE_PRIVATE).edit().putBoolean("wakeStarting", true).commit()
         try {
             StorageService.unpack(this, "model-en-us", "model",
                 { m: Model -> model = m; startListening() },
@@ -124,6 +126,7 @@ class WakeService : Service(), RecognitionListener {
         try {
             val rec = Recognizer(m, 16000f, "[\"jarvis\", \"[unk]\"]")
             speech = SpeechService(rec, 16000f).also { it.startListening(this) }
+            main.postDelayed({ getSharedPreferences("jarvis", Context.MODE_PRIVATE).edit().remove("wakeStarting").apply() }, 3000)
         } catch (e: UnsatisfiedLinkError) { fail("Vosk native", e) }
         catch (e: Throwable) { Log.e(TAG, "listen", e); CrashLog.note(this, "WakeService.listen", e); main.postDelayed({ startListening() }, 3000) }
     }

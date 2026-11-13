@@ -64,6 +64,14 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         CrashLog.install(this)
         super.onCreate(savedInstanceState)
+        // Αν την προηγούμενη φορά η εφαρμογή έκλεισε, δείχνουμε πρώτα την αιτία, πριν ξεκινήσει οτιδήποτε.
+        if (prefs.getBoolean("wakeStarting", false)) {
+            prefs.edit().remove("wakeStarting").putBoolean("wake", false)
+                .putString("lastCrash", "Η ακρόαση «Τζάρβις» (Vosk) έκλεισε την εφαρμογή κατά την εκκίνησή της (native crash).
+Android ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT}) · ${Build.MANUFACTURER} ${Build.MODEL} · ${Build.SUPPORTED_ABIS.joinToString()}").commit()
+        }
+        val earlyCrash = CrashLog.take(this, "lastCrash")
+        if (earlyCrash != null) { crashScreen = true; showCrashScreen(earlyCrash); return }
         if (Build.VERSION.SDK_INT >= 27) { setShowWhenLocked(true); setTurnScreenOn(true) }
         else window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -113,8 +121,26 @@ class MainActivity : Activity() {
         web.loadUrl(URL + if (pendingWake) "?wake=1" else "")
         pendingWake = false
 
-        val crash = CrashLog.take(this, "lastCrash") ?: CrashLog.take(this, "lastProblem")
+        val crash = CrashLog.take(this, "lastProblem")
         if (crash != null) showReport(crash) else askPermissions()
+    }
+
+    private var crashScreen = false
+    /** Απλή οθόνη με την αιτία του κλεισίματος: δεν ξεκινάει τίποτα άλλο, ώστε να μην ξανακλείσει. */
+    private fun showCrashScreen(text: String) {
+        val pad = (16 * resources.displayMetrics.density).toInt()
+        val col = android.widget.LinearLayout(this).apply { orientation = android.widget.LinearLayout.VERTICAL; setPadding(pad, pad * 2, pad, pad); setBackgroundColor(0xFF02070D.toInt()) }
+        val title = android.widget.TextView(this).apply { this.text = "JARVIS: έκλεισε απρόσμενα"; textSize = 20f; setTextColor(0xFF3EE0FF.toInt()) }
+        val info = android.widget.TextView(this).apply { this.text = (if (!wakeEnabled()) "Η ακρόαση «Τζάρβις» απενεργοποιήθηκε προσωρινά, ώστε η εφαρμογή να ανοίγει κανονικά.
+
+" else "") + "Πατήστε «Αντιγραφή» και στείλτε το κείμενο στον δημιουργό σας. Μετά πατήστε «Συνέχεια»."; setTextColor(0xFFD8F6FF.toInt()); setPadding(0, pad, 0, pad) }
+        val copy = android.widget.Button(this).apply { this.text = "Αντιγραφή"; setOnClickListener {
+            (getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(android.content.ClipData.newPlainText("JARVIS", text))
+            android.widget.Toast.makeText(this@MainActivity, "Αντιγράφηκε", android.widget.Toast.LENGTH_SHORT).show() } }
+        val go = android.widget.Button(this).apply { this.text = "Συνέχεια"; setOnClickListener { recreate() } }
+        val body = android.widget.TextView(this).apply { this.text = text; textSize = 11f; setTextColor(0xFF6EA8BA.toInt()); setTextIsSelectable(true); setPadding(0, pad, 0, 0) }
+        col.addView(title); col.addView(info); col.addView(copy); col.addView(go); col.addView(body)
+        setContentView(android.widget.ScrollView(this).apply { setBackgroundColor(0xFF02070D.toInt()); addView(col) })
     }
 
     /** Δείχνει την αιτία του προηγούμενου κλεισίματος, με κουμπί αντιγραφής. */
@@ -141,11 +167,12 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        if (crashScreen) return
         if (hasMic()) { if (wakeEnabled()) WakeService.start(this); askNextSpecialPermission() }
     }
 
     @Deprecated("Deprecated in Java")
-    override fun onBackPressed() { if (web.canGoBack()) web.goBack() else moveTaskToBack(true) }
+    override fun onBackPressed() { if (!crashScreen && web.canGoBack()) web.goBack() else moveTaskToBack(true) }
 
     override fun onDestroy() { tts?.shutdown(); sr?.destroy(); super.onDestroy() }
 
@@ -157,6 +184,7 @@ class MainActivity : Activity() {
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (crashScreen) return
         if (hasMic() && wakeEnabled()) WakeService.start(this)
         askNextSpecialPermission()
     }
