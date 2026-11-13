@@ -384,15 +384,30 @@ async function askAI(text) {
       const o2 = (j2.choices?.[0]?.message?.content || '').trim(); if (o2) aiHistory.push({ role: 'model', parts: [{ text: o2 }] }); return o2 || null;
     }
     // Για ερωτήσεις επικαιρότητας ή «ψάξε/βρες/πρότεινε», ο εγκέφαλος ψάχνει στο Google (δωρεάν λειτουργία του Gemini). Αν δεν επιτρέπεται, απαντά χωρίς αναζήτηση.
-    const wantSearch = S.webSearch !== false && navigator.onLine && /(σημερα|τωρα|φετοσ|χθεσ|αυριο|τελευται|προσφατ|νεα|ειδησ|τιμη|ποσο κανει|ποσο κοστιζει|ποτε παιζει|αποτελεσμ|σκορ|ποιοσ κερδισε|ψαξε|βρεσ|αναζητησ|προτεινε|προτειν|καλυτερ|ωραριο|ανοιχτ|που μπορω|202\d)/.test(norm(text));
+    // Αναζήτηση στο Google μόνο όταν ζητείται καθαρά (είναι πιο αργή από μια απλή απάντηση).
+    const wantSearch = S.webSearch !== false && navigator.onLine && /(ψαξε|βρεσ μου|βρεσ |αναζητησ|τελευταια νεα|ειδησεισ για|τιμη |ποσο κανει|ποσο κοστιζει|ποτε παιζει|αποτελεσμα|σκορ|ποιοσ κερδισε|προτεινε μου|ωραριο|ειναι ανοιχτ|στο ιντερνετ|στο google)/.test(norm(text));
     const gUrl = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(S.model || defaults.model)}:generateContent`;
-    const gReq = (search) => fetch(gUrl, {
+    // Το ιστορικό πρέπει να ξεκινά με τον χρήστη και να εναλλάσσεται χρήστης/βοηθός, αλλιώς το Gemini το απορρίπτει.
+    const cleanHist = (h) => { const out = []; for (const m of h) { if (!out.length && m.role !== 'user') continue; const last = out[out.length - 1]; if (last && last.role === m.role) last.parts = [{ text: last.parts.map((x) => x.text).join('') + '\n' + m.parts.map((x) => x.text).join('') }]; else out.push({ role: m.role, parts: m.parts.map((x) => ({ text: x.text })) }); } return out; };
+    const gReq = (search, fast, hist) => fetch(gUrl, {
       method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': S.geminiKey },
-      body: JSON.stringify({ system_instruction: { parts: [{ text: sys }] }, contents: aiHistory, generationConfig: { temperature: 0.8, maxOutputTokens: 900 }, ...(search ? { tools: [{ google_search: {} }] } : {}) }),
+      body: JSON.stringify({ system_instruction: { parts: [{ text: sys }] }, contents: hist, generationConfig: { temperature: 0.8, maxOutputTokens: 900, ...(fast ? { thinkingConfig: { thinkingBudget: 0 } } : {}) }, ...(search ? { tools: [{ google_search: {} }] } : {}) }),
     });
-    let r = await gReq(wantSearch), j = await r.json();
-    if (!r.ok && wantSearch) { r = await gReq(false); j = await r.json(); }
-    if (!r.ok) { aiHistory.pop(); return `Ο εγκέφαλος ΤΝ επέστρεψε σφάλμα: ${j.error?.message || r.status}. Ελέγξτε το κλειδί και το μοντέλο στις ρυθμίσεις.`; }
+    // Σειρά προσπαθειών: γρήγορη (χωρίς «σκέψη») → χωρίς αναζήτηση → απλή → μόνο η τελευταία ερώτηση.
+    const full = cleanHist(aiHistory), lastOnly = [{ role: 'user', parts: [{ text }] }];
+    const tries = [[wantSearch, S.aiNoFast !== true, full]]; if (wantSearch) tries.push([false, S.aiNoFast !== true, full]); tries.push([false, false, full], [false, false, lastOnly]);
+    let r, j;
+    for (let i = 0; i < tries.length; i++) {
+      r = await gReq(...tries[i]); j = await r.json().catch(() => ({}));
+      if (r.ok) break;
+      if (r.status === 429 || r.status === 401 || r.status === 403) break; // όριο χρήσης ή πρόβλημα κλειδιού: δεν έχει νόημα η επανάληψη
+      if (tries[i][1] && /thinking/i.test(j.error?.message || '')) { S.aiNoFast = true; saveSettings(); }
+    }
+    if (!r.ok) {
+      aiHistory.pop();
+      if (r.status === 429) return 'Ο δωρεάν εγκέφαλος έφτασε το όριο ερωτήσεων για αυτό το λεπτό. Δοκιμάστε ξανά σε λίγο.';
+      return `Ο εγκέφαλος ΤΝ επέστρεψε σφάλμα: ${j.error?.message || r.status}. Ελέγξτε το κλειδί και το μοντέλο στις ρυθμίσεις.`;
+    }
     const out = (j.candidates?.[0]?.content?.parts || []).map((p) => p.text || '').join('').trim();
     if (out) aiHistory.push({ role: 'model', parts: [{ text: out }] });
     return out || null;

@@ -61,7 +61,9 @@ if (A) {
   /* ---------- Ακρόαση ---------- */
   let finalText = '', partialText = '', lastVoiceCmd = 0, missCount = 0;
   window.__nativeSttStart = () => { Voice.listening = true; finalText = ''; partialText = ''; Core.set('listening'); Sound.listen(); $('#interim').textContent = ''; };
-  window.__nativeStt = (t, fin) => { $('#interim').textContent = t; if (fin) finalText = t; else if (t) partialText = t; };
+  // Ταχύτητα: μόλις η φράση μείνει ίδια για 0,9″, θεωρούμε ότι τελειώσατε και δεν περιμένουμε το κινητό να το αποφασίσει.
+  let quickEnd = null;
+  window.__nativeStt = (t, fin) => { $('#interim').textContent = t; clearTimeout(quickEnd); if (fin) finalText = t; else if (t) { partialText = t; quickEnd = setTimeout(() => { if (Voice.listening && partialText === t) { try { A.stopListen(); } catch {} } }, 900); } };
   let sttHelpShown = 0;
   window.__nativeSttError = (code) => {
     // 100+: η διαδικτυακή αναγνώριση απέτυχε και απέτυχε και η δεύτερη προσπάθεια πάνω στο κινητό.

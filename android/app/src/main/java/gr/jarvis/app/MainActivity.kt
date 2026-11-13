@@ -413,6 +413,9 @@ class MainActivity : Activity() {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, "el-GR")
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+            // Πιο γρήγορο τέλος ακρόασης: λιγότερη αναμονή σιωπής μετά την ομιλία.
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 900L)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 700L)
             putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, packageName)
             if (offline) putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
         }
