@@ -470,6 +470,24 @@ class MainActivity : Activity() {
         }
         /** Ορίζει το πρωινό ξύπνημα στο ξυπνητήρι του Android, ώστε να χτυπά και με κλειστή εφαρμογή. */
         @JavascriptInterface fun setMorningAlarm(hour: Int, minute: Int, on: Boolean): String { MorningAlarm.set(this@MainActivity, hour, minute, on); val r = MorningAlarm.schedule(this@MainActivity); note("morning alarm " + r); return r }
+        /**
+         * «Παίξε <κάτι>»: ζητά από το YouTube (ή το YouTube Music, ή όποια εφαρμογή μουσικής υπάρχει) να βρει και να ξεκινήσει μόνο του την αναπαραγωγή.
+         * Επιστρέφει ποια εφαρμογή το ανέλαβε, ή κενό αν καμία (τότε η σελίδα ανοίγει απλή αναζήτηση).
+         */
+        @JavascriptInterface fun playMedia(query: String): String {
+            val q = query.take(200)
+            for (pkg in listOf("com.google.android.youtube", "com.google.android.apps.youtube.music", "")) {
+                try {
+                    val i = Intent(android.provider.MediaStore.INTENT_ACTION_MEDIA_PLAY_FROM_SEARCH)
+                        .putExtra(android.app.SearchManager.QUERY, q)
+                        .putExtra(android.provider.MediaStore.EXTRA_MEDIA_FOCUS, "vnd.android.cursor.item/*")
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    if (pkg.isNotEmpty()) i.setPackage(pkg)
+                    if (i.resolveActivity(packageManager) != null) { main.post { try { startActivity(i) } catch (e: Throwable) { note("playMedia start failed " + e) } }; note("playMedia via " + pkg.ifEmpty { "any" }); return pkg.ifEmpty { "any" } }
+                } catch (e: Throwable) { note("playMedia " + pkg + " " + e) }
+            }
+            note("playMedia: no app"); return ""
+        }
         @JavascriptInterface fun askCalendar() { main.post { try { requestPermissions(arrayOf(Manifest.permission.READ_CALENDAR), REQ_PERMS) } catch (_: Throwable) {} } }
         @JavascriptInterface fun copyText(text: String) {
             main.post {
