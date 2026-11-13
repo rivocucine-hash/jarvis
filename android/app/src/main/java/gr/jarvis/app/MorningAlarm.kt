@@ -23,8 +23,9 @@ import java.util.Calendar
 class MorningAlarm : BroadcastReceiver() {
     override fun onReceive(ctx: Context, intent: Intent) {
         when (intent.action) {
-            Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED -> schedule(ctx)
+            Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED -> { schedule(ctx); syncReminders(ctx, null) }
             ACTION_FIRE -> { fire(ctx); schedule(ctx) }
+            ACTION_REMIND -> remind(ctx, intent.getStringExtra("id") ?: "", intent.getStringExtra("text") ?: "")
         }
     }
 
@@ -32,6 +33,64 @@ class MorningAlarm : BroadcastReceiver() {
         const val ACTION_FIRE = "gr.jarvis.app.MORNING"
         const val CH = "jarvis_morning"
         const val NOTIF_ID = 3
+        const val ACTION_REMIND = "gr.jarvis.app.REMIND"
+        const val CH_REMIND = "jarvis_remind"
+
+        /* ---------- Υπενθυμίσεις που χτυπούν και με κλειστή εφαρμογή ---------- */
+        private fun remindOp(ctx: Context, id: String, text: String) = PendingIntent.getBroadcast(ctx, 1000 + (id.hashCode() and 0xFFFFF),
+            Intent(ctx, MorningAlarm::class.java).setAction(ACTION_REMIND).putExtra("id", id).putExtra("text", text), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+
+        /** json: λίστα [{id, at, text}] από τη σελίδα· null = ξαναστήσιμο από τα αποθηκευμένα (π.χ. μετά από επανεκκίνηση του κινητού). */
+        fun syncReminders(ctx: Context, json: String?): Int {
+            val p = prefs(ctx); val am = ctx.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            val old = try { org.json.JSONArray(p.getString("reminders", "[]")) } catch (_: Throwable) { org.json.JSONArray() }
+            for (i in 0 until old.length()) { val o = old.optJSONObject(i) ?: continue; try { am.cancel(remindOp(ctx, o.optString("id"), o.optString("text"))) } catch (_: Throwable) {} }
+            val now = try { org.json.JSONArray(json ?: p.getString("reminders", "[]")) } catch (_: Throwable) { org.json.JSONArray() }
+            val keep = org.json.JSONArray(); var n = 0
+            for (i in 0 until minOf(now.length(), 60)) {
+                val o = now.optJSONObject(i) ?: continue
+                val at = o.optLong("at"); val id = o.optString("id"); val text = o.optString("text").take(200)
+                if (id.isEmpty() || at < System.currentTimeMillis() - 60000) continue
+                keep.put(org.json.JSONObject().put("id", id).put("at", at).put("text", text))
+                try {
+                    val op = remindOp(ctx, id, text)
+                    if (Build.VERSION.SDK_INT >= 31 && !am.canScheduleExactAlarms()) am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, op)
+                    else am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, op)
+                    n++
+                } catch (_: Throwable) {}
+            }
+            p.edit().putString("reminders", keep.toString()).apply()
+            return n
+        }
+
+        private fun remind(ctx: Context, id: String, text: String) {
+            // Αν η εφαρμογή είναι ανοιχτή μπροστά στον χρήστη, μιλάει η ίδια: δεν χρειάζεται δεύτερη ειδοποίηση.
+            if (MainActivity.visible) return
+            try {
+                val pm = ctx.getSystemService(Context.POWER_SERVICE) as PowerManager
+                @Suppress("DEPRECATION")
+                pm.newWakeLock(PowerManager.FULL_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP or PowerManager.ON_AFTER_RELEASE, "jarvis:remind").acquire(8000)
+            } catch (_: Throwable) {}
+            val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            if (nm.getNotificationChannel(CH_REMIND) == null) {
+                val ch = NotificationChannel(CH_REMIND, "Υπενθυμίσεις JARVIS", NotificationManager.IMPORTANCE_HIGH)
+                ch.setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION), AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION_EVENT).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build())
+                ch.enableVibration(true); ch.lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+                nm.createNotificationChannel(ch)
+            }
+            val i = Intent(ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+            val pi = PendingIntent.getActivity(ctx, 2000 + (id.hashCode() and 0xFFFFF), i, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+            val n = Notification.Builder(ctx, CH_REMIND)
+                .setSmallIcon(R.drawable.ic_stat)
+                .setContentTitle("JARVIS · Υπενθύμιση")
+                .setContentText(text.ifEmpty { "Έχετε μια υπενθύμιση." })
+                .setStyle(Notification.BigTextStyle().bigText(text.ifEmpty { "Έχετε μια υπενθύμιση." }))
+                .setCategory(Notification.CATEGORY_REMINDER)
+                .setContentIntent(pi)
+                .setAutoCancel(true)
+                .build()
+            try { nm.notify(4000 + (id.hashCode() and 0xFFFF), n) } catch (_: Throwable) {}
+        }
 
         private fun prefs(ctx: Context) = ctx.getSharedPreferences("jarvis", Context.MODE_PRIVATE)
         private fun operation(ctx: Context) = PendingIntent.getBroadcast(ctx, 30, Intent(ctx, MorningAlarm::class.java).setAction(ACTION_FIRE), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)

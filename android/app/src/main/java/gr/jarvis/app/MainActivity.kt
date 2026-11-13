@@ -48,6 +48,8 @@ class MainActivity : Activity() {
         const val URL = "https://rivocucine-hash.github.io/jarvis/"
         const val HOST = "rivocucine-hash.github.io"
         const val REQ_PERMS = 10
+        /** Αληθές όσο η εφαρμογή είναι μπροστά στον χρήστη. */
+        @Volatile var visible = false
         const val REQ_FILE = 11
         @Volatile var listeningNative = false
     }
@@ -279,8 +281,11 @@ class MainActivity : Activity() {
         if (intent.getBooleanExtra("wake", false)) js("window.__nativeWake ? __nativeWake() : (location.href='${URL}?wake=1')")
     }
 
+    override fun onPause() { visible = false; super.onPause() }
+
     override fun onResume() {
         super.onResume()
+        visible = true
         if (crashScreen) return
         if (hasMic()) { if (wakeEnabled() && wakeProven()) startWake(); askNextSpecialPermission() }
     }
@@ -488,6 +493,8 @@ class MainActivity : Activity() {
             }
             note("playMedia: no app"); return ""
         }
+        /** Οι υπενθυμίσεις της σελίδας περνούν στο ξυπνητήρι του Android, ώστε να χτυπούν και με κλειστή εφαρμογή. */
+        @JavascriptInterface fun syncReminders(json: String): Int { val n = MorningAlarm.syncReminders(this@MainActivity, json); note("reminders synced " + n); return n }
         @JavascriptInterface fun askCalendar() { main.post { try { requestPermissions(arrayOf(Manifest.permission.READ_CALENDAR), REQ_PERMS) } catch (_: Throwable) {} } }
         @JavascriptInterface fun copyText(text: String) {
             main.post {

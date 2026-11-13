@@ -89,7 +89,9 @@ if (A) {
   Voice.setupSTT = () => true;
   Voice.toggle = function () {
     if (this.listening) { A.stopListen(); return; }
-    A.stopSpeak(); if (typeof Standby !== 'undefined' && Standby.on) Standby.hide(); A.listen();
+    // Διακοπή: σταματά αμέσως ό,τι λέει (και τις επόμενες προτάσεις) και ακούει τη νέα εντολή.
+    speechSynthesis.cancel();
+    if (typeof Standby !== 'undefined' && Standby.on) Standby.hide(); lastVoiceCmd = Date.now(); setTimeout(() => A.listen(), 150);
   };
 
   /* ---------- Συνέχεια συζήτησης: μετά από φωνητική εντολή, ακούει ξανά μία φορά ---------- */
@@ -169,6 +171,10 @@ if (A) {
   let alarmSynced = '';
   const syncAlarm = () => { if (!A.setMorningAlarm) return; const key = (S.wakeTime || '07:00') + '|' + (S.morningWake !== false); if (key === alarmSynced) return; alarmSynced = key; const [h, m] = (S.wakeTime || '07:00').split(':').map(Number); try { A.setMorningAlarm(h || 0, m || 0, S.morningWake !== false); } catch {} };
   setInterval(syncAlarm, 15000);
+  /* Υπενθυμίσεις: αντίγραφο στο ξυπνητήρι του Android, για να χτυπούν και με κλειστή εφαρμογή. */
+  let remSynced = null;
+  const syncReminders = () => { if (!A.syncReminders) return; const list = reminders.filter((r) => r.due > Date.now()).map((r) => ({ id: String(r.id), at: r.due, text: r.kind === 'timer' ? 'Ο χρόνος τελείωσε. ' + (r.text || '') : r.kind === 'alarm' ? 'Ώρα να ξυπνήσετε.' : r.text })); const key = JSON.stringify(list); if (key === remSynced) return; remSynced = key; try { A.syncReminders(key); } catch {} };
+  setInterval(syncReminders, 4000);
   if (wantWake) history.replaceState(null, '', location.pathname);
   const baseFIn = featuresInit;
   window.featuresInit = function () { baseFIn(); dn('fi native'); if (S.wake || S.handsFree) Wake.start(); else Wake.stop(); if (wantWake) setTimeout(onWake, 900); syncAlarm(); if (wantMorning) setTimeout(runMorning, 1500); };
