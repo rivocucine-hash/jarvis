@@ -14,8 +14,11 @@ if (A) {
   const shim = { speaking: false, pending: false, paused: false, onvoiceschanged: null, getVoices: nativeVoices, speak() {}, cancel() { A.stopSpeak(); }, pause() {}, resume() {}, addEventListener() {}, removeEventListener() {} };
   try { Object.defineProperty(window, 'speechSynthesis', { value: shim, configurable: true }); } catch { window.speechSynthesis = shim; }
   if (!window.SpeechSynthesisUtterance) window.SpeechSynthesisUtterance = function (t) { this.text = t; };
+  // Η λίστα φωνών ζητείται από το κινητό μόνο αφού ανοίξει η κύρια οθόνη, για να μην καθυστερεί την εκκίνηση.
+  let ttsReadyTries = 0;
   window.__nativeTtsReady = () => {
-    try { Voice.loadVoices(); if (!S.nativeVoiceInit && typeof applyJarvisVoice === 'function') { S.nativeVoiceInit = true; saveSettings(); applyJarvisVoice(false); } } catch {}
+    if ($('#hud').classList.contains('hidden') && ttsReadyTries++ < 40) return setTimeout(window.__nativeTtsReady, 500);
+    setTimeout(() => { try { Voice.loadVoices(); if (!S.nativeVoiceInit && typeof applyJarvisVoice === 'function') { S.nativeVoiceInit = true; saveSettings(); applyJarvisVoice(false); } } catch {} }, 1500);
   };
 
   /* ---------- Ομιλία ---------- */

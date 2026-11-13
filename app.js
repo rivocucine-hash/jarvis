@@ -598,23 +598,49 @@ function bindSettings() {
 
 /* ---------------- BOOT ---------------- */
 const BOOT_LINES = ['Αρχικοποίηση πυρήνα', 'Φόρτωση νευρωνικού δικτύου', 'Βαθμονόμηση αισθητήρων ήχου', 'Σύνδεση με δορυφορικό δίκτυο καιρού', 'Συγχρονισμός χρονομέτρου ατομικού ρολογιού', 'Φόρτωση τράπεζας μνήμης', 'Ενεργοποίηση φωνητικής μονάδας', 'Πρωτόκολλα ασφαλείας'];
+/* Εκκίνηση που δεν κολλάει: κάθε βήμα προστατεύεται, και ό,τι αποτύχει καταγράφεται και εμφανίζεται. */
+const bootProblems = [];
+let bootStep = '-';
+function bootTry(name, f) { bootStep = name; try { const r = f(); if (r && typeof r.catch === 'function') r.catch((e) => bootProblems.push(name + ': ' + (e && e.message || e))); return r; } catch (e) { bootProblems.push(name + ': ' + (e && e.message || e)); } }
+function showHud() { bootStep = 'showHud'; $('#boot').classList.add('hidden'); $('#hud').classList.remove('hidden'); }
+function reportProblems() {
+  if (!bootProblems.length) return;
+  const txt = bootProblems.splice(0).join(' | ');
+  try { addMsg('ai', '', { html: `⚠ Κάποια συστήματα δεν ξεκίνησαν σωστά, αλλά συνεχίζω κανονικά.<br><span style="opacity:.7;font-size:12px">${escapeHtml(txt)}</span>` }); } catch {}
+}
+addEventListener('error', (e) => { bootProblems.push('js: ' + e.message + ' @' + String(e.filename || '').split('/').pop() + ':' + e.lineno); if (!$('#hud').classList.contains('hidden')) reportProblems(); });
+addEventListener('unhandledrejection', (e) => { bootProblems.push('promise: ' + (e.reason && e.reason.message || e.reason)); });
 async function boot() {
-  Sound.init(); if (Sound.ctx?.state === 'suspended') Sound.ctx.resume();
+  if (boot.started) return; boot.started = true;
+  // Δικλείδα: αν σε 9″ δεν έχει εμφανιστεί η κύρια οθόνη, ανοίγει έτσι κι αλλιώς και γράφει πού κόλλησε.
+  setTimeout(() => { if ($('#hud').classList.contains('hidden')) { bootProblems.push('η εκκίνηση κόλλησε στο βήμα «' + bootStep + '»'); bootTry('forceHud', showHud); bootTry('afterHud', afterHud); } }, 9000);
+  bootTry('audio', () => { Sound.init(); if (Sound.ctx && Sound.ctx.state === 'suspended') return Sound.ctx.resume(); });
   // ξεκλείδωμα TTS σε iOS
-  try { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; speechSynthesis.speak(u); } catch {}
-  $('#bootBtn').disabled = true; $('#bootBtn').style.opacity = 0.3; Sound.boot();
+  bootTry('tts', () => { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; speechSynthesis.speak(u); });
+  bootTry('button', () => { $('#bootBtn').disabled = true; $('#bootBtn').style.opacity = 0.3; });
+  bootTry('bootSound', () => Sound.boot());
   const log = $('#bootLog');
   for (let i = 0; i < BOOT_LINES.length; i++) {
-    const d = document.createElement('div'); d.innerHTML = `&gt; ${BOOT_LINES[i]}... <b>OK</b>`; log.appendChild(d); Sound.tick(); Sound.tone(600 + i * 120, 0.04, 'square', 0.05);
-    $('#bootBar').style.width = ((i + 1) / BOOT_LINES.length) * 100 + '%'; await sleep(170 + Math.random() * 120);
+    bootTry('line' + i, () => { const d = document.createElement('div'); d.innerHTML = `&gt; ${BOOT_LINES[i]}... <b>OK</b>`; log.appendChild(d); $('#bootBar').style.width = ((i + 1) / BOOT_LINES.length) * 100 + '%'; });
+    bootTry('lineSound' + i, () => { Sound.tick(); Sound.tone(600 + i * 120, 0.04, 'square', 0.05); });
+    bootStep = 'sleep' + i; await sleep(170 + Math.random() * 120);
   }
-  await sleep(350); Sound.whoosh();
-  $('#boot').classList.add('hidden'); $('#hud').classList.remove('hidden');
-  Core.init(); Core.set('idle'); if (S.hum) Sound.hum(true);
-  refreshWeatherWidget(); initBattery();
-  reminders.forEach(schedule);
-  if (window.featuresInit) featuresInit();
+  bootStep = 'sleepEnd'; await sleep(350);
+  bootTry('whoosh', () => Sound.whoosh());
+  if ($('#hud').classList.contains('hidden')) { bootTry('showHud', showHud); await afterHud(); }
+}
+let afterHudDone = false;
+async function afterHud() {
+  if (afterHudDone) return; afterHudDone = true;
+  bootTry('core', () => { Core.init(); Core.set('idle'); });
+  bootTry('hum', () => { if (S.hum) Sound.hum(true); });
+  bootTry('weather', () => refreshWeatherWidget());
+  bootTry('battery', () => initBattery());
+  bootTry('reminders', () => reminders.forEach(schedule));
+  bootTry('features', () => { if (window.featuresInit) featuresInit(); });
+  bootStep = 'ready';
   await sleep(500);
+  reportProblems();
   if (!S.userName) {
     const askName = (raw, n) => { if (!/^(με λενε|λεγομαι|ειμαι|ονομαζομαι|να με λεσ)/.test(n) && (n.split(' ').length > 3 || intents.some((it) => it.re.test(n) && (!it.test || it.test(n))))) { setTimeout(() => { if (!S.userName && !pending) pending = askName; }, 0); return null; } const name = cap(raw.replace(/^(με λένε|λέγομαι|είμαι ο|είμαι η|είμαι|ονομάζομαι|να με λες)\s+/i, '').replace(/[.!]/g, '').trim()); S.userName = name; saveSettings(); fillSettings();
       return `Χαίρω πολύ, ${vocative(name)}. Θα σας αποκαλώ «${addressAs()}», όπως αρμόζει. Πατήστε τον αντιδραστήρα για να μου μιλήσετε ή γράψτε μια εντολή. Πείτε «βοήθεια» για να δείτε τι μπορώ να κάνω.`; };
