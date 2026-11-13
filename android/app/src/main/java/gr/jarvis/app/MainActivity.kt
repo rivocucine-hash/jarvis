@@ -379,7 +379,10 @@ class MainActivity : Activity() {
     }
 
     /** offline=true: δεύτερη προσπάθεια με αναγνώριση πάνω στο κινητό, όταν η διαδικτυακή αποτύχει (σφάλμα δικτύου). */
-    private fun startListening(offline: Boolean = false) {
+    /** Μετά από αποτυχία της διαδικτυακής αναγνώρισης, για 30 λεπτά ξεκινάμε κατευθείαν με αυτήν του κινητού (γλιτώνει την αναμονή). */
+    private var preferOfflineUntil = 0L
+    private fun startListening(offlineArg: Boolean = false) {
+        val offline = offlineArg || android.os.SystemClock.elapsedRealtime() < preferOfflineUntil
         if (!hasMic()) { askPermissions(); js("window.__nativeSttError && __nativeSttError(9); window.__nativeSttEnd && __nativeSttEnd()"); return }
         if (!SpeechRecognizer.isRecognitionAvailable(this)) { js("window.__nativeSttError && __nativeSttError(-1); window.__nativeSttEnd && __nativeSttEnd()"); return }
         barge.stop()
@@ -400,7 +403,9 @@ class MainActivity : Activity() {
             override fun onError(code: Int) {
                 note("stt error $code offline=$offline")
                 // Σφάλμα δικτύου (1, 2): δοκιμάζουμε μία φορά την αναγνώριση πάνω στο κινητό πριν τα παρατήσουμε.
-                if ((code == 1 || code == 2) && !offline && !ended) { ended = true; main.postDelayed({ try { rec.destroy() } catch (_: Throwable) {}; startListening(true) }, 250); return }
+                if ((code == 1 || code == 2) && !offline && !ended) { ended = true; preferOfflineUntil = android.os.SystemClock.elapsedRealtime() + 30 * 60000L; main.postDelayed({ try { rec.destroy() } catch (_: Throwable) {}; startListening(true) }, 250); return }
+                // Αν απέτυχε και η αναγνώριση του κινητού (όχι απλώς σιωπή), την επόμενη φορά ξαναδοκιμάζουμε τη διαδικτυακή.
+                if (offline && code != 6 && code != 7) preferOfflineUntil = 0L
                 js("window.__nativeSttError && __nativeSttError(" + (if (offline) 100 + code else code) + ")"); end()
             }
             override fun onResults(r: Bundle?) {

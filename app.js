@@ -390,6 +390,7 @@ async function askAI(text) {
     // Το ιστορικό πρέπει να ξεκινά με τον χρήστη και να εναλλάσσεται χρήστης/βοηθός, αλλιώς το Gemini το απορρίπτει.
     const cleanHist = (h) => { const out = []; for (const m of h) { if (!out.length && m.role !== 'user') continue; const last = out[out.length - 1]; if (last && last.role === m.role) last.parts = [{ text: last.parts.map((x) => x.text).join('') + '\n' + m.parts.map((x) => x.text).join('') }]; else out.push({ role: m.role, parts: m.parts.map((x) => ({ text: x.text })) }); } return out; };
     const gReq = (search, fast, hist) => fetch(gUrl, {
+      signal: AbortSignal.timeout ? AbortSignal.timeout(search ? 20000 : 12000) : undefined,
       method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': S.geminiKey },
       body: JSON.stringify({ system_instruction: { parts: [{ text: sys }] }, contents: hist, generationConfig: { temperature: 0.8, maxOutputTokens: 900, ...(fast ? { thinkingConfig: { thinkingBudget: 0 } } : {}) }, ...(search ? { tools: [{ google_search: {} }] } : {}) }),
     });
@@ -398,8 +399,9 @@ async function askAI(text) {
     const tries = [[wantSearch, S.aiNoFast !== true, full]]; if (wantSearch) tries.push([false, S.aiNoFast !== true, full]); tries.push([false, false, full], [false, false, lastOnly]);
     let r, j;
     for (let i = 0; i < tries.length; i++) {
-      r = await gReq(...tries[i]); j = await r.json().catch(() => ({}));
-      if (r.ok) break;
+      try { r = await gReq(...tries[i]); j = await r.json().catch(() => ({})); } catch { r = { ok: false, status: 0 }; j = { error: { message: 'δεν απάντησε εγκαίρως' } }; continue; }
+      // Αν πέτυχε μόνο η απλή μορφή, την επόμενη φορά ξεκινάμε από αυτήν (χωρίς χαμένη προσπάθεια).
+      if (r.ok) { if (i > 0 && tries[0][1] && !tries[i][1]) { S.aiNoFast = true; saveSettings(); } break; }
       if (r.status === 429 || r.status === 401 || r.status === 403) break; // όριο χρήσης ή πρόβλημα κλειδιού: δεν έχει νόημα η επανάληψη
       if (tries[i][1] && /thinking/i.test(j.error?.message || '')) { S.aiNoFast = true; saveSettings(); }
     }

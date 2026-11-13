@@ -47,6 +47,7 @@ if (A) {
     const my = ++speakToken;
     if (ttsDone) { const f = ttsDone; ttsDone = null; f(); }
     Voice.speakingNow = true; Core.set('speaking');
+    if (tHeard) { T.think = (Date.now() - tHeard) / 1000; T.total = T.listen + T.think; tHeard = 0; if (S.showTimes) toast('ΧΡΟΝΟΙ', `Ακρόαση ${T.listen.toFixed(1)}″ · επεξεργασία ${T.think.toFixed(1)}″`, 5000); }
     bargeOn();
     const parts = splitSentences(clean);
     for (let i = 0; i < parts.length; i++) {
@@ -70,6 +71,8 @@ if (A) {
     lastVoiceCmd = Date.now(); setTimeout(() => { if (!Voice.listening) A.listen(); }, 120);
   };
   intents.unshift(
+    { re: /(ποσο αργησεσ|γιατι αργεισ|ποσο χρονο εκανεσ|δειξε χρονουσ|δειξε μου χρονουσ)/, run: () => { S.showTimes = true; saveSettings(); const t = window.__times; return `Στην τελευταία εντολή: ακρόαση ${t.listen.toFixed(1)} δευτερόλεπτα, επεξεργασία ${t.think.toFixed(1)}. Από εδώ και πέρα θα δείχνω τους χρόνους στην οθόνη μετά από κάθε εντολή. Πείτε «κρύψε χρόνους» για να σταματήσω.`; } },
+    { re: /(κρυψε χρονουσ|μη δειχνεισ χρονουσ)/, run: () => { S.showTimes = false; saveSettings(); return 'Δεν θα δείχνω πλέον τους χρόνους.'; } },
     { re: /(μη διακοπτεσαι|μην διακοπτεσαι|μη σταματασ οταν μιλαω|κλεισε τη διακοπη|απενεργοποιησε τη διακοπη)/, run: () => { S.bargeIn = false; saveSettings(); return 'Κατανοητό. Δεν θα σταματώ όταν ακούω φωνή. Για διακοπή πατήστε τον αντιδραστήρα.'; } },
     { re: /(να διακοπτεσαι|σταματα οταν μιλαω|ενεργοποιησε τη διακοπη|ανοιξε τη διακοπη)/, run: () => { S.bargeIn = true; S.bargeSens = 2; saveSettings(); return 'Μάλιστα. Όταν μιλήσετε από πάνω μου, θα σταματώ και θα σας ακούω.'; } },
     { re: /(πιο ευαισθητη διακοπη|δεν με ακουσ οταν μιλασ|δεν σταματασ οταν μιλαω)/, run: () => { S.bargeIn = true; S.bargeSens = Math.min(3, (S.bargeSens || 2) + 1); saveSettings(); return 'Έκανα τη διακοπή πιο ευαίσθητη.'; } },
@@ -78,7 +81,9 @@ if (A) {
 
   /* ---------- Ακρόαση ---------- */
   let finalText = '', partialText = '', lastVoiceCmd = 0, missCount = 0;
-  window.__nativeSttStart = () => { Voice.listening = true; finalText = ''; partialText = ''; Core.set('listening'); Sound.listen(); $('#interim').textContent = ''; };
+  const T = window.__times = { listen: 0, heard: 0, think: 0, total: 0 };
+  let tStart = 0, tHeard = 0;
+  window.__nativeSttStart = () => { tStart = Date.now(); Voice.listening = true; finalText = ''; partialText = ''; Core.set('listening'); Sound.listen(); $('#interim').textContent = ''; };
   // Ταχύτητα: μόλις η φράση μείνει ίδια για 0,9″, θεωρούμε ότι τελειώσατε και δεν περιμένουμε το κινητό να το αποφασίσει.
   let quickEnd = null;
   window.__nativeStt = (t, fin) => { $('#interim').textContent = t; clearTimeout(quickEnd); if (fin) finalText = t; else if (t) { partialText = t; quickEnd = setTimeout(() => { if (Voice.listening && partialText === t) { try { A.stopListen(); } catch {} } }, 900); } };
@@ -104,7 +109,7 @@ if (A) {
     Voice.listening = false; $('#interim').textContent = ''; if (Core.state === 'listening') Core.set('idle'); Sound.stop();
     // Αν το κινητό δεν έδωσε τελικό κείμενο, κρατάμε ό,τι είχε ακούσει ως εκείνη τη στιγμή.
     const t = (finalText || partialText).trim(); finalText = ''; partialText = '';
-    if (t) { missCount = 0; if (Date.now() - bargeAt < 15000) bargeFalse = 0; lastVoiceCmd = Date.now(); handle(t); }
+    if (t) { missCount = 0; if (Date.now() - bargeAt < 15000) bargeFalse = 0; lastVoiceCmd = Date.now(); tHeard = Date.now(); T.listen = tStart ? (tHeard - tStart) / 1000 : 0; handle(t); }
     else {
       // Διακοπή χωρίς λόγια = λάθος συναγερμός (άκουσα τη δική μου φωνή). Μετά από 2, γίνομαι λιγότερο ευαίσθητος· στο ελάχιστο, την κλείνω.
       if (Date.now() - bargeAt < 15000 && ++bargeFalse >= 2) { bargeFalse = 0; if ((S.bargeSens || 2) > 1) { S.bargeSens = (S.bargeSens || 2) - 1; saveSettings(); } else { S.bargeIn = false; saveSettings(); toast('ΔΙΑΚΟΠΗ', 'Η διακοπή με τη φωνή έκλεισε, γιατί σε αυτό το κινητό άκουγα τη δική μου φωνή. Πείτε «να διακόπτεσαι» για να την ξανανοίξετε.', 9000); } }
