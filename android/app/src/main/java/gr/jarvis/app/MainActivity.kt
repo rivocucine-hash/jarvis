@@ -351,13 +351,16 @@ class MainActivity : Activity() {
         } catch (_: Exception) {}
     }
 
-    private fun startListening() {
+    /** offline=true: δεύτερη προσπάθεια με αναγνώριση πάνω στο κινητό, όταν η διαδικτυακή αποτύχει (σφάλμα δικτύου). */
+    private fun startListening(offline: Boolean = false) {
         if (!hasMic()) { askPermissions(); js("window.__nativeSttError && __nativeSttError(9); window.__nativeSttEnd && __nativeSttEnd()"); return }
         if (!SpeechRecognizer.isRecognitionAvailable(this)) { js("window.__nativeSttError && __nativeSttError(-1); window.__nativeSttEnd && __nativeSttEnd()"); return }
         WakeService.send(this, WakeService.ACTION_PAUSE)
         listeningNative = true
         sr?.destroy()
-        val rec = SpeechRecognizer.createSpeechRecognizer(this); sr = rec
+        val onDevice = offline && Build.VERSION.SDK_INT >= 31 && try { SpeechRecognizer.isOnDeviceRecognitionAvailable(this) } catch (_: Throwable) { false }
+        val rec = if (onDevice) SpeechRecognizer.createOnDeviceSpeechRecognizer(this) else SpeechRecognizer.createSpeechRecognizer(this); sr = rec
+        note("stt start offline=$offline onDevice=$onDevice")
         var ended = false
         val end = { if (!ended) { ended = true; listeningNative = false; js("window.__nativeSttEnd && __nativeSttEnd()"); main.postDelayed({ rec.destroy(); if (!listeningNative) WakeService.send(this, WakeService.ACTION_RESUME) }, 300) } }
         rec.setRecognitionListener(object : RecognitionListener {
@@ -366,7 +369,12 @@ class MainActivity : Activity() {
             override fun onRmsChanged(v: Float) {}
             override fun onBufferReceived(b: ByteArray?) {}
             override fun onEndOfSpeech() {}
-            override fun onError(code: Int) { js("window.__nativeSttError && __nativeSttError($code)"); end() }
+            override fun onError(code: Int) {
+                note("stt error $code offline=$offline")
+                // Σφάλμα δικτύου (1, 2): δοκιμάζουμε μία φορά την αναγνώριση πάνω στο κινητό πριν τα παρατήσουμε.
+                if ((code == 1 || code == 2) && !offline && !ended) { ended = true; main.postDelayed({ try { rec.destroy() } catch (_: Throwable) {}; startListening(true) }, 250); return }
+                js("window.__nativeSttError && __nativeSttError(" + (if (offline) 100 + code else code) + ")"); end()
+            }
             override fun onResults(r: Bundle?) {
                 val t = r?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull() ?: ""
                 js("window.__nativeStt && __nativeStt(${q(t)}, true)"); end()
@@ -382,6 +390,8 @@ class MainActivity : Activity() {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, "el-GR")
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+            putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, packageName)
+            if (offline) putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
         }
         try { rec.startListening(intent) } catch (e: Exception) { js("window.__nativeSttError && __nativeSttError(-2)"); end() }
     }

@@ -43,7 +43,18 @@ if (A) {
   let finalText = '', partialText = '', lastVoiceCmd = 0, missCount = 0;
   window.__nativeSttStart = () => { Voice.listening = true; finalText = ''; partialText = ''; Core.set('listening'); Sound.listen(); $('#interim').textContent = ''; };
   window.__nativeStt = (t, fin) => { $('#interim').textContent = t; if (fin) finalText = t; else if (t) partialText = t; };
+  let sttHelpShown = 0;
   window.__nativeSttError = (code) => {
+    // 100+: η διαδικτυακή αναγνώριση απέτυχε και απέτυχε και η δεύτερη προσπάθεια πάνω στο κινητό.
+    if (code >= 100) {
+      const c = code - 100;
+      if (c === 6 || c === 7) code = c;
+      else {
+        if (Date.now() - sttHelpShown > 60000) { sttHelpShown = Date.now(); addMsg('ai', '', { html: `Η αναγνώριση φωνής του κινητού δεν απάντησε (κωδικός ${c}). Δεν φταίει ο εγκέφαλος Gemini.<br>Δοκιμάστε: 1) ελέγξτε ότι έχετε ίντερνετ, 2) Ρυθμίσεις κινητού → Εφαρμογές → <b>Google</b> → επιτρέψτε δεδομένα κινητής/Wi-Fi και μικρόφωνο, και βγάλτε τον περιορισμό μπαταρίας, 3) ενημερώστε την εφαρμογή Google από το Play Store. Στο μεταξύ μπορείτε να γράφετε τις εντολές.` }); }
+        else toast('ΑΚΡΟΑΣΗ', 'Η αναγνώριση φωνής δεν απάντησε. Δοκιμάστε ξανά ή γράψτε την εντολή.', 4000);
+        return;
+      }
+    }
     // 6/7: δεν ακούστηκε ή δεν αναγνωρίστηκε ομιλία. Αν δεν υπάρχει ούτε μισή φράση, το λέμε (όχι συνέχεια).
     if ((code === 6 || code === 7) && !partialText && ++missCount <= 2) { toast('ΑΚΡΟΑΣΗ', 'Δεν σας άκουσα καθαρά. Πατήστε τον αντιδραστήρα και μιλήστε μόλις ακουστεί ο ήχος.', 4000); }
     if (code === 9) addMsg('ai', 'Χρειάζομαι άδεια για το μικρόφωνο. Πατήστε «Να επιτρέπεται» όταν σας ρωτήσει το κινητό.');
