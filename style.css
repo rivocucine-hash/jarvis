@@ -255,3 +255,9 @@ body.night #hud{filter:brightness(.78) saturate(.85);transition:filter 2s}
 .sb-text{max-width:84vw;text-align:center;font-size:16px;line-height:1.45;color:var(--text);opacity:0;transition:opacity 1s}
 .sb-text.show{opacity:.55}
 .sb-hint{position:absolute;bottom:calc(env(safe-area-inset-bottom) + 24px);font-size:11px;letter-spacing:.15em;color:var(--muted);opacity:.35}
+
+/* ===== v11: δοκιμή ακρόασης (εφαρμογή Android) ===== */
+.native-only{display:none}
+body.native .native-only{display:inline-block}
+.wakelog{white-space:pre-wrap;word-break:break-word;font-family:ui-monospace,monospace;font-size:11px;line-height:1.45;color:var(--text);background:rgba(0,0,0,.35);border:1px solid var(--line);padding:8px;margin:8px 0;max-height:46vh;overflow:auto}
+.wakecopy{padding:9px 12px;background:transparent;border:1px solid var(--cyan);color:var(--cyan);font-family:var(--mono);font-size:10px;letter-spacing:.15em}

@@ -75,10 +75,34 @@ if (A) {
   window.__nativeWake = () => { onWake(); };
 
   /* ---------- Η συνεχής ακρόαση γίνεται από την υπηρεσία του κινητού ---------- */
-  const wakeBlocked = () => { try { return !!(A.isWakeBlocked && A.isWakeBlocked()); } catch { return false; } };
-  intents.unshift({ re: /(δοκιμασε ξανα την ακροαση|ξαναδοκιμασε την ακροαση|ενεργοποιησε την ακροαση τζαρβισ)/, run: () => { if (A.retryWake) A.retryWake(); Banner.clear('wake'); return 'Δοκιμάζω ξανά την ακρόαση «Τζάρβις». Αν η εφαρμογή κλείσει, ανοίξτε την ξανά και θα απενεργοποιηθεί μόνη της.'; } });
+  // Η ακρόαση τρέχει σε ξεχωριστή διεργασία. Ξεκινάει αυτόματα μόνο αφού αποδειχθεί σταθερή σε αυτό το κινητό.
+  const wakeProven = () => { try { return A.isWakeProven ? !!A.isWakeProven() : true; } catch { return true; } };
+  const WakeTest = {
+    el: null, t: null, n: 0,
+    render(final) {
+      const log = (A.wakeLog ? A.wakeLog(!!final) : '') || '(κενό: η υπηρεσία δεν έγραψε ακόμα τίποτα)';
+      if (!this.el || !document.body.contains(this.el)) { const m = addMsg('ai', '', { html: '<b>🎙 Δοκιμή ακρόασης «Τζάρβις»</b><pre class="wakelog"></pre><button class="wakecopy" type="button">ΑΝΤΙΓΡΑΦΗ ΑΝΑΦΟΡΑΣ</button>' }); this.el = m.querySelector('.wakelog'); m.querySelector('.wakecopy').onclick = () => A.copyText(A.wakeLog(true)); }
+      this.el.textContent = log; $('#log').scrollTop = 1e9; return log;
+    },
+    start() {
+      if (!A.testWake) return 'Αυτή η έκδοση της εφαρμογής δεν έχει δοκιμή ακρόασης. Εγκαταστήστε τη νεότερη.';
+      clearInterval(this.t); this.el = null; this.n = 0; A.testWake();
+      this.t = setInterval(() => { this.n++; const log = this.render(false); if (/10 ΣΤΑΘΕΡΗ/.test(log)) this.done(true); else if (this.n > 60) this.done(false); }, 700);
+      return { silent: true, text: '' };
+    },
+    done(ok) {
+      clearInterval(this.t); this.t = null; this.render(true);
+      if (ok) { celebrate(true); say('Η ακρόαση λειτουργεί σε αυτό το κινητό! Από εδώ και πέρα ξεκινάει μόνη της. Κλειδώστε το κινητό και πείτε «Τζάρβις».', { noRelisten: true }); Wake.start(); }
+      else say('Η ακρόαση σταμάτησε. Εγώ συνεχίζω να δουλεύω κανονικά. Πατήστε «Αντιγραφή αναφοράς» και στείλτε τη στον δημιουργό σας.', { noRelisten: true });
+    },
+  };
+  window.__nativeWakeState = (st) => { if (st === 'died' && WakeTest.t) setTimeout(() => WakeTest.done(false), 600); else if (st === 'died') { Banner.clear('wake'); toast('ΑΚΡΟΑΣΗ', 'Η ακρόαση «Τζάρβις» τερματίστηκε από το κινητό. Γράψτε «αναφορά ακρόασης» για λεπτομέρειες.', 9000); } };
+  intents.unshift(
+    { re: /(δοκιμη ακροασησ|δοκιμασε (ξανα )?την ακροαση|ξαναδοκιμασε την ακροαση|ενεργοποιησε την ακροαση τζαρβισ|τεστ ακροασησ)/, run: () => WakeTest.start() },
+    { re: /(αναφορα ακροασησ|τι εγινε με την ακροαση|log ακροασησ)/, run: () => { WakeTest.el = null; WakeTest.render(true); return { silent: true, text: '' }; } },
+  );
   Wake.start = function () {
-    if (wakeBlocked()) { this.on = false; Banner.set('wake', '⚠ Η ακρόαση «Τζάρβις» δεν λειτουργεί ακόμα σε αυτό το κινητό. Πατήστε το μικρόφωνο.', () => Banner.clear('wake')); return false; }
+    if (!wakeProven()) { this.on = false; Banner.set('wake', '⚠ Η ακρόαση «Τζάρβις» δεν έχει δοκιμαστεί. Γράψτε «δοκιμή ακρόασης».', () => Banner.clear('wake')); return false; }
     this.on = true; A.setWakeEnabled(true); Banner.set('wake', '🎙 Πείτε «Τζάρβις» οποιαδήποτε στιγμή', () => { S.wake = false; S.handsFree = false; saveSettings(); fillSettings(); this.stop(); }); return true; };
   Wake.stop = function () { this.on = false; A.setWakeEnabled(false); Banner.clear('wake'); };
   Wake.pause = () => {}; Wake.resume = () => {}; Wake.loop = () => {}; Wake.keepAwake = async () => {};

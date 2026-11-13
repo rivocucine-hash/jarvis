@@ -48,6 +48,7 @@
 
         <service
             android:name=".WakeService"
+            android:process=":wake"
             android:exported="false"
             android:foregroundServiceType="microphone" />
     </application>

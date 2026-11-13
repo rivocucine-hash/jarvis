@@ -168,13 +168,13 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         if (crashScreen) return
-        if (hasMic()) { if (wakeEnabled()) WakeService.start(this); askNextSpecialPermission() }
+        if (hasMic()) { if (wakeEnabled() && wakeProven()) startWake(); askNextSpecialPermission() }
     }
 
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() { if (!crashScreen && web.canGoBack()) web.goBack() else moveTaskToBack(true) }
 
-    override fun onDestroy() { tts?.shutdown(); sr?.destroy(); super.onDestroy() }
+    override fun onDestroy() { try { if (wakeBound) unbindService(wakeConn) } catch (_: Throwable) {}; tts?.shutdown(); sr?.destroy(); super.onDestroy() }
 
     @Deprecated("Deprecated in Java")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -185,12 +185,23 @@ class MainActivity : Activity() {
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (crashScreen) return
-        if (hasMic() && wakeEnabled()) WakeService.start(this)
+        if (hasMic() && wakeEnabled() && wakeProven()) startWake()
         askNextSpecialPermission()
     }
 
     /* ---------------- Άδειες ---------------- */
     private fun hasMic() = checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+    private fun wakeProven() = WakeService.okFile(this).exists()
+    private var wakeBound = false
+    private val wakeConn = object : android.content.ServiceConnection {
+        override fun onServiceConnected(name: android.content.ComponentName?, service: android.os.IBinder?) { js("window.__nativeWakeState && __nativeWakeState('up')") }
+        override fun onServiceDisconnected(name: android.content.ComponentName?) { js("window.__nativeWakeState && __nativeWakeState('died')") }
+    }
+    /** Ξεκινά την ακρόαση στη δική της διεργασία και παρακολουθεί αν θα τερματιστεί. */
+    private fun startWake() {
+        WakeService.start(this)
+        try { if (!wakeBound) wakeBound = bindService(Intent(this, WakeService::class.java), wakeConn, 0) } catch (_: Throwable) {}
+    }
     private fun wakeBlocked() = prefs.getInt("wakeBlockedVersion", -1) == appVersion()
     private fun wakeEnabled() = prefs.getBoolean("wake", true) && !wakeBlocked()
     private fun appVersion(): Int = try { packageManager.getPackageInfo(packageName, 0).let { if (Build.VERSION.SDK_INT >= 28) it.longVersionCode.toInt() else @Suppress("DEPRECATION") it.versionCode } } catch (_: Throwable) { 0 }
@@ -303,12 +314,29 @@ class MainActivity : Activity() {
         @JavascriptInterface fun listen() { main.post { startListening() } }
         @JavascriptInterface fun stopListen() { main.post { sr?.stopListening() } }
 
-        @JavascriptInterface fun isWakeBlocked(): Boolean = wakeBlocked()
-        @JavascriptInterface fun retryWake() { prefs.edit().remove("wakeBlockedVersion").putBoolean("wake", true).apply(); main.post { if (hasMic()) WakeService.start(this@MainActivity) } }
+        @JavascriptInterface fun isWakeBlocked(): Boolean = false
+        @JavascriptInterface fun isWakeProven(): Boolean = wakeProven()
+        @JavascriptInterface fun retryWake() { testWake() }
+        /** Δοκιμή ακρόασης: ξεκινά την υπηρεσία όσο κι αν δεν έχει αποδειχθεί ακόμα ότι δουλεύει. */
+        @JavascriptInterface fun testWake() {
+            prefs.edit().remove("wakeBlockedVersion").putBoolean("wake", true).apply()
+            main.post { if (hasMic()) { try { WakeService.logFile(this@MainActivity).delete() } catch (_: Throwable) {}; startWake() } else askPermissions() }
+        }
+        /** Το αρχείο καταγραφής της ακρόασης, μαζί με όσα κατέγραψε το Android αν τερματίστηκε. */
+        @JavascriptInterface fun wakeLog(withExit: Boolean): String {
+            val log = try { WakeService.logFile(this@MainActivity).readText() } catch (_: Throwable) { "" }
+            return if (withExit) "JARVIS v" + appVersion() + "\n" + log + "\n--- Android: τελευταίοι τερματισμοί ---\n" + CrashLog.exitInfo(this@MainActivity) else log
+        }
+        @JavascriptInterface fun copyText(text: String) {
+            main.post {
+                (getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(android.content.ClipData.newPlainText("JARVIS", text))
+                android.widget.Toast.makeText(this@MainActivity, "Αντιγράφηκε", android.widget.Toast.LENGTH_SHORT).show()
+            }
+        }
         @JavascriptInterface fun setWakeEnabled(on: Boolean) {
-            if (on && wakeBlocked()) return
             prefs.edit().putBoolean("wake", on).apply()
-            main.post { if (on) { if (hasMic()) WakeService.start(this@MainActivity) else askPermissions() } else WakeService.send(this@MainActivity, WakeService.ACTION_STOP) }
+            // Αυτόματη εκκίνηση μόνο αν η ακρόαση έχει αποδειχθεί σταθερή σε αυτό το κινητό
+            main.post { if (on) { if (!wakeProven()) return@post; if (hasMic()) startWake() else askPermissions() } else WakeService.send(this@MainActivity, WakeService.ACTION_STOP) }
         }
         @JavascriptInterface fun isWakeEnabled(): Boolean = wakeEnabled()
         @JavascriptInterface fun wakeDone() { main.postDelayed({ if (!listeningNative) WakeService.send(this@MainActivity, WakeService.ACTION_RESUME) }, 300) }

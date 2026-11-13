@@ -8,6 +8,7 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.os.Binder
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
@@ -21,92 +22,160 @@ import org.vosk.Model
 import org.vosk.Recognizer
 import org.vosk.android.RecognitionListener
 import org.vosk.android.SpeechService
-import org.vosk.android.StorageService
+import java.io.File
+import java.io.FileOutputStream
+import java.io.PrintWriter
+import java.io.StringWriter
 
 /**
  * Ακούει συνεχώς, ΧΩΡΙΣ ίντερνετ, μόνο για τη λέξη «Τζάρβις».
- * Όταν την ακούσει, ανάβει την οθόνη και ανοίγει το JARVIS.
+ * Τρέχει σε ΞΕΧΩΡΙΣΤΗ διεργασία (:wake): αν το σύστημα την τερματίσει, ο JARVIS μένει ανοιχτός.
+ * Κάθε βήμα γράφεται με χρόνο στο files/wake.log, ώστε να φαίνεται πού σταμάτησε.
  */
 class WakeService : Service(), RecognitionListener {
 
     companion object {
         const val TAG = "JarvisWake"
-        const val CH_WAKE = "jarvis_wake"
+        const val CH_WAKE = "jarvis_wake2"
         const val CH_ALERT = "jarvis_alert"
         const val CH_MSG = "jarvis_msg"
+        const val ACTION_START = "gr.jarvis.app.START"
         const val ACTION_PAUSE = "gr.jarvis.app.PAUSE"
         const val ACTION_RESUME = "gr.jarvis.app.RESUME"
         const val ACTION_STOP = "gr.jarvis.app.STOP"
-        @Volatile var running = false
+        const val LOG_FILE = "wake.log"
+        const val OK_FILE = "wake.ok"
+
+        /** Ισχύει μόνο μέσα στην κύρια διεργασία: αν έχουμε ζητήσει εκκίνηση της ακρόασης. */
+        @Volatile var requested = false
+
+        fun logFile(ctx: Context) = File(ctx.filesDir, LOG_FILE)
+        fun okFile(ctx: Context) = File(ctx.filesDir, OK_FILE)
 
         fun start(ctx: Context) {
-            if (running) return
-            try { ctx.startForegroundService(Intent(ctx, WakeService::class.java)) } catch (e: Exception) { Log.e(TAG, "start", e) }
+            requested = true
+            try { ctx.startForegroundService(Intent(ctx, WakeService::class.java).setAction(ACTION_START)) } catch (e: Exception) { Log.e(TAG, "start", e) }
         }
         fun send(ctx: Context, action: String) {
-            if (!running) return
+            if (!requested) return
+            if (action == ACTION_STOP) requested = false
             try { ctx.startService(Intent(ctx, WakeService::class.java).setAction(action)) } catch (e: Exception) { Log.e(TAG, "send", e) }
         }
         fun ensureChannels(ctx: Context) {
             val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            if (nm.getNotificationChannel(CH_WAKE) == null) nm.createNotificationChannel(NotificationChannel(CH_WAKE, "Ακρόαση «Τζάρβις»", NotificationManager.IMPORTANCE_MIN).apply { setShowBadge(false) })
+            if (nm.getNotificationChannel(CH_WAKE) == null) nm.createNotificationChannel(NotificationChannel(CH_WAKE, "Ακρόαση «Τζάρβις»", NotificationManager.IMPORTANCE_LOW).apply { setShowBadge(false) })
             if (nm.getNotificationChannel(CH_ALERT) == null) nm.createNotificationChannel(NotificationChannel(CH_ALERT, "Αφύπνιση JARVIS", NotificationManager.IMPORTANCE_HIGH).apply { setSound(null, null) })
             if (nm.getNotificationChannel(CH_MSG) == null) nm.createNotificationChannel(NotificationChannel(CH_MSG, "Υπενθυμίσεις JARVIS", NotificationManager.IMPORTANCE_HIGH))
         }
     }
 
     private val main = Handler(Looper.getMainLooper())
+    private val t0 = SystemClock.elapsedRealtime()
     private var model: Model? = null
     private var speech: SpeechService? = null
     private var paused = false
+    private var initStarted = false
+    private var foreground = false
     private var lastWake = 0L
 
-    override fun onBind(intent: Intent?): IBinder? = null
+    override fun onBind(intent: Intent?): IBinder = Binder()
+
+    /** Γράφει μια γραμμή στο αρχείο καταγραφής και τη στέλνει αμέσως στον δίσκο. */
+    private fun log(s: String) {
+        try {
+            FileOutputStream(logFile(this), true).use { f ->
+                f.write(("[" + (SystemClock.elapsedRealtime() - t0) + "ms] " + s + "\n").toByteArray())
+                f.fd.sync()
+            }
+        } catch (_: Throwable) {}
+        Log.i(TAG, s)
+    }
+    private fun logError(where: String, e: Throwable) {
+        val sw = StringWriter(); e.printStackTrace(PrintWriter(sw))
+        log("ΣΦΑΛΜΑ στο «$where»: " + sw.toString().take(1500))
+    }
 
     override fun onCreate() {
         super.onCreate()
-        CrashLog.install(this)
-        try { ensureChannels(this) } catch (e: Throwable) { CrashLog.note(this, "channels", e) }
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { t, e -> logError("uncaught, thread " + t.name, e); previous?.uncaughtException(t, e) }
+        try { logFile(this).delete() } catch (_: Throwable) {}
+        log("0 διεργασία ακρόασης ξεκίνησε · Android " + Build.VERSION.RELEASE + " (SDK " + Build.VERSION.SDK_INT + ") · " + Build.MANUFACTURER + " " + Build.MODEL + " · " + Build.SUPPORTED_ABIS.joinToString())
+        try { ensureChannels(this) } catch (e: Throwable) { logError("channels", e) }
         try {
             if (Build.VERSION.SDK_INT >= 29) startForeground(1, ongoing(), ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
             else startForeground(1, ongoing())
+            foreground = true
+            log("1 υπηρεσία προσκηνίου (μικρόφωνο) ξεκίνησε")
         } catch (e: Throwable) {
-            // Το Android δεν επιτρέπει έναρξη ακρόασης από το παρασκήνιο: θα ξεκινήσει μόλις ανοίξει η εφαρμογή.
-            Log.e(TAG, "foreground", e); CrashLog.note(this, "WakeService.startForeground", e); stopSelf(); return
+            logError("startForeground", e); stopSelf()
         }
-        running = true
-        stage("1 foreground service ok")
-        // Σημάδι «ξεκινάει η ακρόαση»: αν η εφαρμογή κλείσει πριν σβηστεί, την επόμενη φορά η ακρόαση απενεργοποιείται.
-        getSharedPreferences("jarvis", Context.MODE_PRIVATE).edit().putBoolean("wakeStarting", true).commit()
-        try {
-            stage("2 unpack model start")
-            StorageService.unpack(this, "model-en-us", "model",
-                { m: Model -> model = m; stage("3 model loaded"); startListening() },
-                { e: java.io.IOException -> Log.e(TAG, "model", e); fail("Vosk model", e) })
-        } catch (e: Throwable) { fail("Vosk unpack", e) }
-    }
-
-    /** Αν η ακρόαση αποτύχει, την απενεργοποιούμε χωρίς να κλείσει η εφαρμογή. */
-    private fun fail(where: String, e: Throwable) {
-        CrashLog.note(this, "WakeService: $where", e)
-        getSharedPreferences("jarvis", Context.MODE_PRIVATE).edit().putBoolean("wake", false).apply()
-        main.post { stopSelf() }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
-            ACTION_PAUSE -> pause()
-            ACTION_RESUME -> resume()
-            ACTION_STOP -> { stopSelf(); return START_NOT_STICKY }
+            ACTION_PAUSE -> if (initStarted) pause() else { stopSelf(); return START_NOT_STICKY }
+            ACTION_RESUME -> if (initStarted) resume() else { stopSelf(); return START_NOT_STICKY }
+            ACTION_STOP -> { log("τερματισμός κατόπιν αιτήματος"); stopSelf(); return START_NOT_STICKY }
+            else -> if (foreground && !initStarted) { initStarted = true; Thread({ init() }, "wake-init").start() }
         }
-        return START_STICKY
+        return START_NOT_STICKY
     }
 
     override fun onDestroy() {
-        running = false
         stopListening()
-        model?.close(); model = null
+        try { model?.close() } catch (_: Throwable) {}
+        model = null
         super.onDestroy()
+    }
+
+    /** Εκκίνηση βήμα-βήμα, με καταγραφή πριν από κάθε βήμα. */
+    private fun init() {
+        try {
+            log("2 αναμονή 1,5″ (μόνο η υπηρεσία, χωρίς τίποτα άλλο)")
+            Thread.sleep(1500)
+
+            log("3 φόρτωση βιβλιοθήκης jnidispatch (JNA)")
+            val ptr = com.sun.jna.Native.POINTER_SIZE
+            log("3 ok · pointer size $ptr")
+
+            log("4 φόρτωση βιβλιοθήκης libvosk")
+            org.vosk.LibVosk.setLogLevel(org.vosk.LogLevel.WARNINGS)
+            log("4 ok")
+
+            log("5 αντιγραφή μοντέλου στην εσωτερική μνήμη")
+            val dir = File(filesDir, "model-en-us")
+            val marker = File(dir, ".copied")
+            if (!marker.exists()) {
+                dir.deleteRecursively()
+                val n = copyAssets("model-en-us", dir)
+                marker.writeText("ok")
+                log("5 ok · αντιγράφηκαν $n αρχεία")
+            } else log("5 ok · υπήρχε ήδη")
+
+            log("6 άνοιγμα μοντέλου")
+            val m = Model(dir.absolutePath)
+            model = m
+            log("6 ok")
+
+            main.post { startListening() }
+        } catch (e: Throwable) {
+            logError("εκκίνηση", e)
+            main.post { stopSelf() }
+        }
+    }
+
+    private fun copyAssets(path: String, target: File): Int {
+        val list = assets.list(path) ?: emptyArray()
+        if (list.isEmpty()) {
+            target.parentFile?.mkdirs()
+            assets.open(path).use { input -> FileOutputStream(target).use { out -> input.copyTo(out, 64 * 1024) } }
+            return 1
+        }
+        target.mkdirs()
+        var n = 0
+        for (name in list) n += copyAssets("$path/$name", File(target, name))
+        return n
     }
 
     private fun ongoing(): Notification {
@@ -122,26 +191,31 @@ class WakeService : Service(), RecognitionListener {
             .build()
     }
 
-    /** Σημάδι προόδου: γράφεται αμέσως στον δίσκο, ώστε να ξέρουμε πού έφτασε αν το σύστημα τερματίσει την εφαρμογή. */
-    private fun stage(s: String) { try { getSharedPreferences("jarvis", Context.MODE_PRIVATE).edit().putString("wakeStage", s + " @" + (SystemClock.elapsedRealtime() - t0) + "ms").commit() } catch (_: Throwable) {} }
-    private val t0 = SystemClock.elapsedRealtime()
+    private var alive = 0
+    private val heartbeat = object : Runnable {
+        override fun run() {
+            alive += 5
+            if (alive == 10) { try { okFile(this@WakeService).writeText("ok") } catch (_: Throwable) {}; log("10 ΣΤΑΘΕΡΗ ακρόαση 10″ · η ακρόαση «Τζάρβις» λειτουργεί σε αυτό το κινητό") }
+            else if (alive <= 60 || alive % 300 == 0) log("ζωντανή ${alive}″")
+            main.postDelayed(this, 5000)
+        }
+    }
 
     private fun startListening() {
         val m = model ?: return
         if (paused || speech != null) return
         try {
-            stage("4 creating recognizer")
+            log("7 δημιουργία αναγνωριστή")
             val rec = Recognizer(m, 16000f, "[\"jarvis\", \"[unk]\"]")
-            stage("5 recognizer ok, opening microphone")
+            log("8 άνοιγμα μικροφώνου")
             speech = SpeechService(rec, 16000f).also { it.startListening(this) }
-            stage("6 listening")
-            main.postDelayed({ getSharedPreferences("jarvis", Context.MODE_PRIVATE).edit().remove("wakeStarting").apply(); stage("7 stable 3s") }, 3000)
-        } catch (e: UnsatisfiedLinkError) { fail("Vosk native", e) }
-        catch (e: Throwable) { Log.e(TAG, "listen", e); CrashLog.note(this, "WakeService.listen", e); main.postDelayed({ startListening() }, 3000) }
+            log("9 ΑΚΟΥΕΙ για «Τζάρβις»")
+            main.removeCallbacks(heartbeat); main.postDelayed(heartbeat, 5000)
+        } catch (e: Throwable) { logError("ακρόαση", e); main.postDelayed({ stopSelf() }, 200) }
     }
 
     private fun stopListening() {
-        try { speech?.stop(); speech?.shutdown() } catch (_: Exception) {}
+        try { speech?.stop(); speech?.shutdown() } catch (_: Throwable) {}
         speech = null
     }
 
@@ -152,7 +226,7 @@ class WakeService : Service(), RecognitionListener {
     override fun onPartialResult(hypothesis: String?) {}
     override fun onResult(hypothesis: String?) { check(hypothesis) }
     override fun onFinalResult(hypothesis: String?) { check(hypothesis) }
-    override fun onError(exception: Exception?) { Log.e(TAG, "vosk", exception); stopListening(); main.postDelayed({ startListening() }, 2000) }
+    override fun onError(exception: Exception?) { if (exception != null) logError("vosk", exception); stopListening(); main.postDelayed({ startListening() }, 2000) }
     override fun onTimeout() { stopListening(); startListening() }
 
     private fun check(hypothesis: String?) {
@@ -161,6 +235,7 @@ class WakeService : Service(), RecognitionListener {
         val now = SystemClock.elapsedRealtime()
         if (now - lastWake < 4000) return
         lastWake = now
+        log("ΑΚΟΥΣΤΗΚΕ «Τζάρβις»")
         pause()
         wakeUp()
     }
@@ -178,7 +253,7 @@ class WakeService : Service(), RecognitionListener {
         } catch (_: Exception) {}
 
         // 1) Απευθείας άνοιγμα (χρειάζεται «Εμφάνιση πάνω από άλλες εφαρμογές»)
-        if (Settings.canDrawOverlays(this)) { try { startActivity(i) } catch (e: Exception) { Log.e(TAG, "open", e) } }
+        if (Settings.canDrawOverlays(this)) { try { startActivity(i) } catch (e: Exception) { logError("άνοιγμα", e) } }
 
         // 2) Ειδοποίηση πλήρους οθόνης (για κλειδωμένο κινητό)
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -195,7 +270,7 @@ class WakeService : Service(), RecognitionListener {
         try { nm.notify(2, n) } catch (_: Exception) {}
         main.postDelayed({ nm.cancel(2) }, 8000)
 
-        // Ασφάλεια: αν δεν ανοίξει τίποτα, ξαναρχίζει να ακούει
-        main.postDelayed({ if (paused && !MainActivity.listeningNative) resume() }, 25000)
+        // Ασφάλεια: αν δεν έρθει εντολή συνέχισης από την εφαρμογή, ξαναρχίζει να ακούει
+        main.postDelayed({ if (paused) resume() }, 30000)
     }
 }
