@@ -7,6 +7,8 @@
 'use strict';
 
 if (S.proactive === undefined) { S.proactive = true; S.morningWake = true; saveSettings(); }
+// Η πρωινή ενημέρωση δεν λέγεται πια αυτόματα στο άνοιγμα: μόνο όταν ζητηθεί («καλημέρα»). Αλλάζει μία φορά.
+if (!S.noAutoBriefV1) { S.noAutoBriefV1 = true; S.autoBrief = false; saveSettings(); }
 
 const Proactive = {
   last: 0,           // πότε μίλησε τελευταία φορά με δική του πρωτοβουλία
@@ -27,7 +29,9 @@ const Proactive = {
     notify('Καλημέρα', 'Ώρα να ξυπνήσετε. Η πρωινή ενημέρωση είναι έτοιμη.');
     await sleep(6000);
     S.lastBrief = new Date().toDateString(); saveSettings();
-    try { await morningBriefing(); } catch { say(`Καλημέρα${nmc()}. Ώρα να ξυπνήσετε.`, { noRelisten: true }); }
+    // Η ενημέρωση λέγεται μόνο αν τη ζητήσει ο χρήστης.
+    pending = async (raw, nn) => (/^(ναι|οκ|ok|ενταξει|βεβαια|πεσ|πεσ μου|πεσ τα|ακουω|θελω|αμε)/.test(nn) ? (morningBriefing(), { silent: true, text: '' }) : /^(οχι|αργοτερα|ασε|ασ το|μη)/.test(nn) ? 'Όπως επιθυμείτε. Πείτε «καλημέρα» όποτε τη θέλετε.' : null);
+    await say(`Καλημέρα${nmc()}. Ώρα να ξυπνήσετε. Πείτε «ναι» αν θέλετε την ενημέρωση της ημέρας.`);
   },
   tick() {
     const d = new Date(), day = todayKey(), now = `${pad(d.getHours())}:${pad(d.getMinutes())}`, h = d.getHours();
@@ -59,7 +63,7 @@ intents.unshift(
     if (!m[3]) { if (/και μιση/.test(n)) mm = 30; else if (/και τεταρτο/.test(n)) mm = 15; else if (/παρα τεταρτο/.test(n)) { hh = (hh + 23) % 24; mm = 45; } }
     if (hh > 23 || mm > 59) return null;
     S.wakeTime = `${pad(hh)}:${pad(mm)}`; S.morningWake = true; saveSettings(); try { fillSettings(); } catch {}
-    return `Μάλιστα. Στις ${S.wakeTime} θα σας πω καλημέρα με μουσική 432 και την ενημέρωση της ημέρας. Αφήστε την εφαρμογή ανοιχτή και το κινητό στη φόρτιση.`;
+    return `Μάλιστα. Στις ${S.wakeTime} θα σας πω καλημέρα με μουσική 432. Την ενημέρωση θα τη λέω μόνο αν τη ζητήσετε. Αφήστε την εφαρμογή ανοιχτή και το κινητό στη φόρτιση.`;
   } },
   { re: /^(δοκιμασε το ξυπνημα|δοκιμη ξυπνηματοσ)$/, run: () => { Proactive.morning(); return { silent: true, text: '' }; } },
 );
