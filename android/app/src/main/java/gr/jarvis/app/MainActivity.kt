@@ -67,8 +67,7 @@ class MainActivity : Activity() {
         // Αν την προηγούμενη φορά η εφαρμογή έκλεισε, δείχνουμε πρώτα την αιτία, πριν ξεκινήσει οτιδήποτε.
         if (prefs.getBoolean("wakeStarting", false)) {
             prefs.edit().remove("wakeStarting").putBoolean("wake", false)
-                .putString("lastCrash", "Η ακρόαση «Τζάρβις» (Vosk) έκλεισε την εφαρμογή κατά την εκκίνησή της (native crash).
-Android ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT}) · ${Build.MANUFACTURER} ${Build.MODEL} · ${Build.SUPPORTED_ABIS.joinToString()}").commit()
+                .putString("lastCrash", "Η ακρόαση «Τζάρβις» (Vosk) έκλεισε την εφαρμογή κατά την εκκίνησή της (native crash).\nAndroid ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT}) · ${Build.MANUFACTURER} ${Build.MODEL} · ${Build.SUPPORTED_ABIS.joinToString()}").commit()
         }
         val earlyCrash = CrashLog.take(this, "lastCrash")
         if (earlyCrash != null) { crashScreen = true; showCrashScreen(earlyCrash); return }
@@ -131,9 +130,7 @@ Android ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT}) · ${Build.MANUF
         val pad = (16 * resources.displayMetrics.density).toInt()
         val col = android.widget.LinearLayout(this).apply { orientation = android.widget.LinearLayout.VERTICAL; setPadding(pad, pad * 2, pad, pad); setBackgroundColor(0xFF02070D.toInt()) }
         val title = android.widget.TextView(this).apply { this.text = "JARVIS: έκλεισε απρόσμενα"; textSize = 20f; setTextColor(0xFF3EE0FF.toInt()) }
-        val info = android.widget.TextView(this).apply { this.text = (if (!wakeEnabled()) "Η ακρόαση «Τζάρβις» απενεργοποιήθηκε προσωρινά, ώστε η εφαρμογή να ανοίγει κανονικά.
-
-" else "") + "Πατήστε «Αντιγραφή» και στείλτε το κείμενο στον δημιουργό σας. Μετά πατήστε «Συνέχεια»."; setTextColor(0xFFD8F6FF.toInt()); setPadding(0, pad, 0, pad) }
+        val info = android.widget.TextView(this).apply { this.text = (if (!wakeEnabled()) "Η ακρόαση «Τζάρβις» απενεργοποιήθηκε προσωρινά, ώστε η εφαρμογή να ανοίγει κανονικά.\n\n" else "") + "Πατήστε «Αντιγραφή» και στείλτε το κείμενο στον δημιουργό σας. Μετά πατήστε «Συνέχεια»."; setTextColor(0xFFD8F6FF.toInt()); setPadding(0, pad, 0, pad) }
         val copy = android.widget.Button(this).apply { this.text = "Αντιγραφή"; setOnClickListener {
             (getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(android.content.ClipData.newPlainText("JARVIS", text))
             android.widget.Toast.makeText(this@MainActivity, "Αντιγράφηκε", android.widget.Toast.LENGTH_SHORT).show() } }
