@@ -8,6 +8,8 @@
 const A = window.AndroidJarvis;
 if (A) {
   document.body.classList.add('native');
+  // Η ελληνική φωνή του κινητού είναι γυναικεία: χαμηλότερος τόνος για να ακούγεται ανδρική (μία φορά, για όσους είχαν την παλιά ρύθμιση).
+  try { if (S.jarvisVoice !== false && !S.deepVoiceV2) { S.deepVoiceV2 = true; S.pitch = 0.55; S.rate = 1; S.jarvisVoice = true; saveSettings(); } } catch {}
 
   /* ---------- Φωνές: η λίστα έρχεται από το κινητό ---------- */
   // Μόνο η έτοιμη λίστα (voicesCached): η παλιά κλήση voices() περίμενε τη μηχανή ομιλίας και μπορούσε να παγώσει τη σελίδα.
@@ -38,18 +40,21 @@ if (A) {
   };
 
   /* ---------- Ακρόαση ---------- */
-  let finalText = '', lastVoiceCmd = 0;
-  window.__nativeSttStart = () => { Voice.listening = true; finalText = ''; Core.set('listening'); Sound.listen(); $('#interim').textContent = ''; };
-  window.__nativeStt = (t, fin) => { $('#interim').textContent = t; if (fin) finalText = t; };
+  let finalText = '', partialText = '', lastVoiceCmd = 0, missCount = 0;
+  window.__nativeSttStart = () => { Voice.listening = true; finalText = ''; partialText = ''; Core.set('listening'); Sound.listen(); $('#interim').textContent = ''; };
+  window.__nativeStt = (t, fin) => { $('#interim').textContent = t; if (fin) finalText = t; else if (t) partialText = t; };
   window.__nativeSttError = (code) => {
+    // 6/7: δεν ακούστηκε ή δεν αναγνωρίστηκε ομιλία. Αν δεν υπάρχει ούτε μισή φράση, το λέμε (όχι συνέχεια).
+    if ((code === 6 || code === 7) && !partialText && ++missCount <= 2) { toast('ΑΚΡΟΑΣΗ', 'Δεν σας άκουσα καθαρά. Πατήστε τον αντιδραστήρα και μιλήστε μόλις ακουστεί ο ήχος.', 4000); }
     if (code === 9) addMsg('ai', 'Χρειάζομαι άδεια για το μικρόφωνο. Πατήστε «Να επιτρέπεται» όταν σας ρωτήσει το κινητό.');
     else if (code === 2 || code === 1) addMsg('ai', 'Χωρίς ίντερνετ η αναγνώριση φωνής δεν είναι διαθέσιμη. Γράψτε την εντολή.');
     else if (code === -1) addMsg('ai', 'Δεν βρέθηκε υπηρεσία αναγνώρισης φωνής. Εγκαταστήστε ή ενημερώστε την εφαρμογή Google.');
   };
   window.__nativeSttEnd = () => {
     Voice.listening = false; $('#interim').textContent = ''; if (Core.state === 'listening') Core.set('idle'); Sound.stop();
-    const t = finalText.trim(); finalText = '';
-    if (t) { lastVoiceCmd = Date.now(); handle(t); } else A.wakeDone();
+    // Αν το κινητό δεν έδωσε τελικό κείμενο, κρατάμε ό,τι είχε ακούσει ως εκείνη τη στιγμή.
+    const t = (finalText || partialText).trim(); finalText = ''; partialText = '';
+    if (t) { missCount = 0; lastVoiceCmd = Date.now(); handle(t); } else A.wakeDone();
   };
   Voice.setupSTT = () => true;
   Voice.toggle = function () {

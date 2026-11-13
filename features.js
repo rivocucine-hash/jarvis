@@ -805,7 +805,24 @@ function helpHtml() {
 
 /* ---------------- ΕΝΤΟΛΕΣ (προηγούνται των βασικών) ---------------- */
 const yes = (nn) => /^(ναι|οκ|ok|βεβαια|εντα|παμε|σιγουρα|ναι παμε|ξεκινα)/.test(nn);
+/* «Κλείσε το»: κλείνει ό,τι έχει ανοίξει ο βοηθός (παράθυρα, πρόγραμμα, μουσική, αναμονή). */
+function closeAll() {
+  const closed = [];
+  $$('.sheet:not(.hidden)').forEach((s) => { s.classList.add('hidden'); closed.push('το παράθυρο'); });
+  if (Session.active) { Session.stop(); closed.push('το πρόγραμμα'); }
+  if (Music.nodes || Music.label && Music.playing) closed.push('τη μουσική');
+  try { Music.stop(2); } catch {}
+  if (Party.on) { Party.stop(); closed.push('το πάρτι'); }
+  if (window.Cook && Cook.r) { Cook.r = null; closed.push('τη συνταγή'); }
+  if (window.Standby && Standby.on) { Standby.hide(); closed.push('την αναμονή'); }
+  try { speechSynthesis.cancel(); } catch {}
+  if (closed.length) return `Έκλεισα ${[...new Set(closed)].join(' και ')}${nmc()}.`;
+  return 'Δεν έχω κάτι δικό μου ανοιχτό. Αν άνοιξα άλλη εφαρμογή ή ιστοσελίδα, πατήστε το κουμπί «πίσω» του κινητού για να γυρίσετε σε μένα.';
+}
 const F = [
+  { re: /^(κλεισε|κλειστο|κλεισ το|κλειστε|κλεισε (το|την|τον|τα|αυτο|το αυτο|τα ολα|ολα)( τωρα)?|κλεισε (το )?(παραθυρο|πανελ|μενου|κεντρο δεδομενων)|κλεισε (τισ )?ρυθμισεισ|κλεισε (το )?προγραμμα|πισω|γυρνα πισω|εξοδοσ|βγεσ)$/, run: () => closeAll() },
+  { re: /^(ανοιξε|δειξε|δειξε μου) (το )?(κεντρο δεδομενων|τα δεδομενα μου|τη μνημη)$/, run: () => { $('#memBtn').click(); return { silent: true, text: '' }; } },
+  { re: /^(ανοιξε|δειξε|δειξε μου) (τισ )?ρυθμισεισ$/, run: () => { $('#settingsBtn').click(); return { silent: true, text: '' }; } },
   // διακοπή όλων
   { re: /^(σταματα|σταματησε|stop|τελοσ|σιωπη|σκασε|σωπα|ησυχια|αρκετα|φτανει)$/, run: () => { speechSynthesis.cancel(); if (Session.active) Session.stop(); Music.stop(2); Party.stop(); return { silent: true, text: '■' }; } },
   // βοήθεια

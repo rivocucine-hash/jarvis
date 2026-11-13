@@ -5,7 +5,8 @@
 
 const MALE_HINT = /(male|άνδρ|ανδρ|stefanos|στέφανος|nestoras|νέστορας|nikos|giorgos|dimitris|aris|kostas)/i;
 const FEMALE_HINT = /(female|γυναικ|melina|μελίνα|athina|αθηνά|maria|eleni|ελένη)/i;
-const JARVIS_PITCH = 0.72, JARVIS_RATE = 0.95;
+// Στο κινητό (Android) η ελληνική φωνή είναι γυναικεία, οπότε τη χαμηλώνουμε περισσότερο για να ακούγεται ανδρική.
+const JARVIS_PITCH = window.AndroidJarvis ? 0.55 : 0.72, JARVIS_RATE = window.AndroidJarvis ? 1.0 : 0.95;
 const greekVoices = () => speechSynthesis.getVoices().filter((v) => /^el/i.test(v.lang));
 function isMale(v) { return MALE_HINT.test(v.name) && !FEMALE_HINT.test(v.name); }
 function voiceLabel(v, i) { return `${isMale(v) ? '♂ ' : FEMALE_HINT.test(v.name) ? '♀ ' : ''}${v.name}${v.localService ? '' : ' (online)'}`; }

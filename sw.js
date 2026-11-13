@@ -1,8 +1,8 @@
 // Service worker: εγκατάσταση, λειτουργία χωρίς ίντερνετ, αποθήκευση τελευταίων δεδομένων
-const CACHE = 'jarvis-v19';
+const CACHE = 'jarvis-v20';
 const DATA = 'jarvis-data-v1';
 const FONTS = 'jarvis-fonts-v1';
-const SHELL = ['./', './index.html', './style.css', './app.js', './features.js', './life.js', './extra.js', './work.js', './report.js', './backup.js', './voice.js', './native.js', './offline.js', './manifest.json', './icons/icon-192.png', './icons/icon-512.png'];
+const SHELL = ['./', './index.html', './style.css', './app.js', './features.js', './life.js', './extra.js', './work.js', './report.js', './backup.js', './voice.js', './native.js', './offline.js', './understand.js', './manifest.json', './icons/icon-192.png', './icons/icon-512.png'];
 // Υπηρεσίες των οποίων την τελευταία απάντηση κρατάμε για χρήση χωρίς σύνδεση
 const API_HOSTS = ['api.open-meteo.com', 'geocoding-api.open-meteo.com', 'el.wikipedia.org', 'site.api.espn.com', 'api-live.euroleague.net', 'open.er-api.com', 'api.rss2json.com', 'router.project-osrm.org', 'api.mymemory.translated.net', 'api.themoviedb.org'];
 const FONT_HOSTS = ['fonts.googleapis.com', 'fonts.gstatic.com'];

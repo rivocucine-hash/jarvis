@@ -347,9 +347,29 @@ const AI_PROVIDERS = {
   openrouter: { url: 'https://openrouter.ai/api/v1/chat/completions', model: 'meta-llama/llama-3.3-70b-instruct:free', name: 'OpenRouter' },
 };
 function hasAI() { const p = S.aiProvider || 'gemini'; return p === 'gemini' ? !!S.geminiKey : !!S.aiKey; }
+/* Χωρίς κλειδί: δωρεάν υπηρεσία χωρίς εγγραφή (όριο περίπου 1 απάντηση ανά 45″). Με κλειδί Gemini/Groq δεν υπάρχει αυτό το όριο. */
+const FREE_AI_URL = 'https://text.pollinations.ai/openai';
+let freeAiNext = 0;
+async function askFreeAI(sys) {
+  if (!navigator.onLine || Date.now() < freeAiNext) return null;
+  const messages = [{ role: 'system', content: sys }, ...aiHistory.slice(-6).map((m) => ({ role: m.role === 'model' ? 'assistant' : 'user', content: m.parts.map((x) => x.text).join('') }))];
+  const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 20000);
+  try {
+    const r = await fetch(FREE_AI_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: 'openai', messages }), signal: ctl.signal });
+    if (!r.ok) { freeAiNext = Date.now() + 45000; return null; }
+    const j = await r.json(); freeAiNext = Date.now() + 45000;
+    return (j.choices?.[0]?.message?.content || '').trim() || null;
+  } catch { return null; } finally { clearTimeout(t); }
+}
 async function askAI(text) {
-  if (!hasAI()) return null;
-  const sys = `Είσαι ο ${S.assistant}, ένας εξαιρετικά ευφυής, ευγενικός και διακριτικά σαρκαστικός προσωπικός βοηθός τεχνητής νοημοσύνης, με ύφος Βρετανού μπάτλερ από το μέλλον. Μιλάς πάντα ελληνικά, στον πληθυντικό ευγενείας, και αποκαλείς τον χρήστη «${addressAs()}». Απαντάς ΑΜΕΣΑ και ΣΥΓΚΕΚΡΙΜΕΝΑ σε αυτό που ζητήθηκε: πρώτα η απάντηση, χωρίς εισαγωγές, χωρίς «ως ΤΝ δεν μπορώ». Αν σου ζητηθεί κείμενο (ποίημα, email, μήνυμα, ιδέες), το γράφεις ολόκληρο. Αν κάτι είναι ασαφές, κάνεις μία σύντομη διευκρινιστική ερώτηση. ${S.userName ? 'Ο χρήστης λέγεται ' + S.userName + '.' : ''} Οι απαντήσεις σου είναι σύντομες (1-3 προτάσεις) για απλές ερωτήσεις, και όσο χρειάζεται όταν ζητηθεί κείμενο, γιατί διαβάζονται φωναχτά. Μη χρησιμοποιείς markdown, λίστες ή emoji. Σημερινή ημερομηνία και ώρα: ${new Date().toLocaleString('el-GR')}.${window.aiContext ? aiContext() : ''}`;
+  if (!hasAI()) {
+    const sysF = `Είσαι ο ${S.assistant}, ευγενικός προσωπικός βοηθός με ύφος Βρετανού μπάτλερ. Μιλάς ελληνικά, στον πληθυντικό ευγενείας, και αποκαλείς τον χρήστη «${addressAs()}». Απαντάς άμεσα, σε 1-3 προτάσεις, χωρίς markdown, λίστες ή emoji, γιατί η απάντηση διαβάζεται φωναχτά. Σημερινή ημερομηνία και ώρα: ${new Date().toLocaleString('el-GR')}.${window.aiCommands ? aiCommands() : ''}`;
+    aiHistory.push({ role: 'user', parts: [{ text }] }); while (aiHistory.length > 16) aiHistory.shift();
+    const o = await askFreeAI(sysF);
+    if (o) aiHistory.push({ role: 'model', parts: [{ text: o }] }); else aiHistory.pop();
+    return o;
+  }
+  const sys = `Είσαι ο ${S.assistant}, ένας εξαιρετικά ευφυής, ευγενικός και διακριτικά σαρκαστικός προσωπικός βοηθός τεχνητής νοημοσύνης, με ύφος Βρετανού μπάτλερ από το μέλλον. Μιλάς πάντα ελληνικά, στον πληθυντικό ευγενείας, και αποκαλείς τον χρήστη «${addressAs()}». Απαντάς ΑΜΕΣΑ και ΣΥΓΚΕΚΡΙΜΕΝΑ σε αυτό που ζητήθηκε: πρώτα η απάντηση, χωρίς εισαγωγές, χωρίς «ως ΤΝ δεν μπορώ». Αν σου ζητηθεί κείμενο (ποίημα, email, μήνυμα, ιδέες), το γράφεις ολόκληρο. Αν κάτι είναι ασαφές, κάνεις μία σύντομη διευκρινιστική ερώτηση. ${S.userName ? 'Ο χρήστης λέγεται ' + S.userName + '.' : ''} Οι απαντήσεις σου είναι σύντομες (1-3 προτάσεις) για απλές ερωτήσεις, και όσο χρειάζεται όταν ζητηθεί κείμενο, γιατί διαβάζονται φωναχτά. Μη χρησιμοποιείς markdown, λίστες ή emoji. Σημερινή ημερομηνία και ώρα: ${new Date().toLocaleString('el-GR')}.${window.aiContext ? aiContext() : ''}${window.aiCommands ? aiCommands() : ''}`;
   aiHistory.push({ role: 'user', parts: [{ text }] }); while (aiHistory.length > 16) aiHistory.shift();
   try {
     const prov = S.aiProvider || 'gemini';
@@ -530,6 +550,16 @@ function helpHtml() {
 
 /* ---------------- ROUTER ---------------- */
 let busy = false;
+/* Δοκιμάζει τις γνωστές εντολές με τη σειρά. Επιστρέφει την απάντηση ή null αν καμία δεν ταιριάζει. */
+async function runIntents(raw2, n2) {
+  for (const it of intents) {
+    const m = n2.match(it.re);
+    if (!m || (it.test && !it.test(n2))) continue;
+    let out; try { out = await it.run(raw2, n2, m); } catch (e) { console.error(e); out = 'Συνέβη ένα σφάλμα κατά την επεξεργασία. Ελέγξτε τη σύνδεση και δοκιμάστε ξανά.'; Sound.error(); }
+    if (out != null) return out;
+  }
+  return null;
+}
 async function handle(raw) {
   raw = raw.trim().replace(/[.!?;;]+$/, ''); if (!raw) return;
   addMsg('user', raw); Sound.tap();
@@ -540,19 +570,23 @@ async function handle(raw) {
 
   // όνομα βοηθού στην αρχή → αφαίρεση
   const an = norm(S.assistant);
-  let n2 = n.replace(new RegExp('^(' + an + '|τζαρβισ|τζαρβι|jarvis)\\s*'), '').trim() || n;
+  let n2 = n.replace(new RegExp('^(' + an + '|τζαρβισ|τζαρβησ|τζαρβιζ|τσαρβισ|τζαρβι|ζαρβισ|jarvis)[,\\s]*'), '').trim() || n;
   let raw2 = n2 !== n ? raw.split(/\s+/).slice(raw.split(/\s+/).length - n2.split(' ').length).join(' ') : raw;
 
   Core.set('thinking');
-  for (const it of intents) {
-    const m = n2.match(it.re);
-    if (!m || (it.test && !it.test(n2))) continue;
-    let out; try { out = await it.run(raw2, n2, m); } catch (e) { console.error(e); out = 'Συνέβη ένα σφάλμα κατά την επεξεργασία. Ελέγξτε τη σύνδεση και δοκιμάστε ξανά.'; Sound.error(); }
-    if (out != null) return respond(out);
-  }
-  // fallback
+  const direct = await runIntents(raw2, n2);
+  if (direct != null) return respond(direct);
+  // ελεύθερη ομιλία: βρίσκουμε ποια γνωστή εντολή εννοεί (χωρίς ίντερνετ)
+  const guess = window.understand ? understand(n2) : null;
+  if (guess) { const g = await runIntents(guess, norm(guess)); if (g != null) return respond(g); }
+  // fallback: ο εγκέφαλος ΤΝ απαντά ή διαλέγει εντολή
   const ai = await askAI(raw);
-  if (ai) return respond(ai);
+  if (ai) {
+    const cm = ai.match(/ΕΝΤΟΛΗ:\s*«?([^»\n]+)/i);
+    if (cm) { const c = cm[1].trim().replace(/[.»"]+$/, ''); const o = await runIntents(c, norm(c)); if (o != null) return respond(o); }
+    const clean = ai.replace(/ΕΝΤΟΛΗ:[^\n]*/gi, '').trim();
+    if (clean) return respond(clean);
+  }
   // τελευταία προσπάθεια: βικιπαίδεια, αφού αφαιρεθούν οι λέξεις ερώτησης
   const core = raw2.replace(/[;?]/g, '').split(/\s+/).filter((w) => !/^(πες|πείτε|μου|μας|τι|τί|πώς|πως|ποιος|ποια|ποιο|ποιοι|πού|που|πότε|γιατί|ξέρεις|μπορείς|να|είναι|ήταν|ο|η|το|οι|τα|τον|την|της|του|των|για|σχετικά|με|ένα|μια|λίγα|κάτι|εξήγησε|εξηγήστε)$/i.test(w)).join(' ');
   if (core && core.split(' ').length <= 3) { const w = await wiki(core); if (w) return respond(w); }
