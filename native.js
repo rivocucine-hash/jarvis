@@ -10,11 +10,14 @@ if (A) {
   document.body.classList.add('native');
   // Η ελληνική φωνή του κινητού είναι γυναικεία: χαμηλότερος τόνος για να ακούγεται ανδρική (μία φορά, για όσους είχαν την παλιά ρύθμιση).
   try { if (S.jarvisVoice !== false && !S.deepVoiceV2) { S.deepVoiceV2 = true; S.pitch = 0.55; S.rate = 1; S.jarvisVoice = true; saveSettings(); } } catch {}
+  // Πιο αργή, καθαρή εκφορά (μία φορά).
+  try { if (!S.slowVoiceV1) { S.slowVoiceV1 = true; if (S.rate >= 0.95) S.rate = 0.88; saveSettings(); } } catch {}
 
   /* ---------- Φωνές: η λίστα έρχεται από το κινητό ---------- */
   // Μόνο η έτοιμη λίστα (voicesCached): η παλιά κλήση voices() περίμενε τη μηχανή ομιλίας και μπορούσε να παγώσει τη σελίδα.
   const nativeVoices = () => { try { return JSON.parse(A.voicesCached ? A.voicesCached() : '[]').map((v) => ({ name: v.name, voiceURI: v.name, lang: 'el-GR', localService: v.local, default: false })); } catch { return []; } };
-  const shim = { speaking: false, pending: false, paused: false, onvoiceschanged: null, getVoices: nativeVoices, speak() {}, cancel() { A.stopSpeak(); }, pause() {}, resume() {}, addEventListener() {}, removeEventListener() {} };
+  let speakToken = 0;
+  const shim = { speaking: false, pending: false, paused: false, onvoiceschanged: null, getVoices: nativeVoices, speak() {}, cancel() { speakToken++; Voice.speakingNow = false; A.stopSpeak(); if (window.__nativeTtsDone) window.__nativeTtsDone(); }, pause() {}, resume() {}, addEventListener() {}, removeEventListener() {} };
   try { Object.defineProperty(window, 'speechSynthesis', { value: shim, configurable: true }); } catch { window.speechSynthesis = shim; }
   if (!window.SpeechSynthesisUtterance) window.SpeechSynthesisUtterance = function (t) { this.text = t; };
   // Η λίστα φωνών ζητείται από το κινητό μόνο αφού ανοίξει η κύρια οθόνη, για να μην καθυστερεί την εκκίνηση.
@@ -28,15 +31,31 @@ if (A) {
   let ttsDone = null, ttsSafety = null;
   window.__nativeTtsStart = () => { Voice.speakingNow = true; Core.set('speaking'); };
   window.__nativeTtsDone = () => { clearTimeout(ttsSafety); const f = ttsDone; ttsDone = null; if (f) f(); };
-  Voice.speak = function (text) {
-    return new Promise((res) => {
-      const clean = String(text).replace(/<[^>]+>/g, '').replace(/[\u{1F300}-\u{1FAFF}☀-➿]/gu, '').replace(/\*+/g, '').trim();
-      if (!clean) return res();
-      if (ttsDone) { const f = ttsDone; ttsDone = null; f(); }
-      ttsDone = () => { Voice.speakingNow = false; Voice.lastEnd = Date.now(); if (Core.state === 'speaking') Core.set('idle'); res(); };
-      Core.set('speaking'); A.speak(clean, +S.rate || 1, +S.pitch || 1, S.voiceURI || '');
-      ttsSafety = setTimeout(() => window.__nativeTtsDone(), 2500 + clean.length * 120);
-    });
+  // Μιλάει πρόταση-πρόταση με μικρή παύση ανάμεσα, για να μην ακούγονται όλα «μαζεμένα».
+  const speakOne = (part) => new Promise((res) => {
+    ttsDone = res; A.speak(part, +S.rate || 1, +S.pitch || 1, S.voiceURI || '');
+    clearTimeout(ttsSafety); ttsSafety = setTimeout(() => window.__nativeTtsDone(), 2500 + part.length * 120);
+  });
+  const splitSentences = (t) => {
+    const raw = t.split(/(?<=[.!;?…:])\s+|\n+/).map((x) => x.trim()).filter(Boolean), out = [];
+    for (const p of raw) { if (out.length && out[out.length - 1].length < 14) out[out.length - 1] += ' ' + p; else out.push(p); }
+    return out;
+  };
+  Voice.speak = async function (text) {
+    const clean = String(text).replace(/<[^>]+>/g, '').replace(/[\u{1F300}-\u{1FAFF}☀-➿]/gu, '').replace(/\*+/g, '').trim();
+    if (!clean) return;
+    const my = ++speakToken;
+    if (ttsDone) { const f = ttsDone; ttsDone = null; f(); }
+    Voice.speakingNow = true; Core.set('speaking');
+    const parts = splitSentences(clean);
+    for (let i = 0; i < parts.length; i++) {
+      if (my !== speakToken) return;
+      await speakOne(parts[i]);
+      if (my !== speakToken) return;
+      if (i < parts.length - 1) await sleep(/[:,]$/.test(parts[i]) ? 180 : 380);
+    }
+    if (my !== speakToken) return;
+    Voice.speakingNow = false; Voice.lastEnd = Date.now(); if (Core.state === 'speaking') Core.set('idle');
   };
 
   /* ---------- Ακρόαση ---------- */
