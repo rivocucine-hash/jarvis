@@ -560,9 +560,28 @@ class MainActivity : Activity() {
             }
             return found.entries.map { it.key to it.value }
         }
-        /** kind: "call" ανοίγει το πληκτρολόγιο κλήσης, "sms" ανοίγει νέο SMS με έτοιμο κείμενο. Επιστρέφει {status, name, options(ονόματα μόνο)}. */
+        private var contactCalls = ArrayDeque<Long>()
+        private fun openContact(kind: String, number: String, body: String) {
+            try {
+                val i = if (kind == "sms") Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:" + Uri.encode(number))).putExtra("sms_body", body.take(500))
+                        else Intent(Intent.ACTION_DIAL, Uri.parse("tel:" + Uri.encode(number)))
+                startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            } catch (_: Throwable) {}
+        }
+        /**
+         * kind: "call" ανοίγει το πληκτρολόγιο κλήσης, "sms" ανοίγει νέο SMS με έτοιμο κείμενο.
+         * Επιστρέφει ΜΟΝΟ {status}: ούτε ονόματα ούτε αριθμοί επαφών φτάνουν στη σελίδα.
+         * Αν ταιριάζουν πολλές επαφές, η επιλογή γίνεται σε παράθυρο του κινητού. Υπάρχει όριο κλήσεων, ώστε να μην μπορεί να «ψαχτεί» ο κατάλογος.
+         */
         @JavascriptInterface fun contactAction(kind: String, query: String, body: String): String {
             val out = JSONObject()
+            val nowMs = android.os.SystemClock.elapsedRealtime()
+            synchronized(contactCalls) {
+                while (contactCalls.isNotEmpty() && nowMs - contactCalls.first() > 3600000L) contactCalls.removeFirst()
+                if (contactCalls.size >= 30 || (contactCalls.isNotEmpty() && nowMs - contactCalls.last() < 1500L)) return out.put("status", "busy").toString()
+                contactCalls.addLast(nowMs)
+            }
+            if (plainName(query).replace(" ", "").length < 3) return out.put("status", "none").toString()
             if (checkSelfPermission(Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) {
                 main.post { try { requestPermissions(arrayOf(Manifest.permission.READ_CONTACTS), REQ_PERMS) } catch (_: Throwable) {} }
                 return out.put("status", "noperm").toString()
@@ -571,15 +590,20 @@ class MainActivity : Activity() {
             if (list.isEmpty()) return out.put("status", "none").toString()
             val exact = list.filter { plainName(it.first) == plainName(query) }
             val pick = if (list.size == 1) list[0] else if (exact.size == 1) exact[0] else null
-            if (pick == null) return out.put("status", "many").put("options", JSONArray(list.take(6).map { it.first })).toString()
-            main.post {
-                try {
-                    val i = if (kind == "sms") Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:" + Uri.encode(pick.second))).putExtra("sms_body", body.take(500))
-                            else Intent(Intent.ACTION_DIAL, Uri.parse("tel:" + Uri.encode(pick.second)))
-                    startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                } catch (_: Throwable) {}
+            if (pick == null) {
+                // Πολλές επαφές: η λίστα εμφανίζεται σε παράθυρο του κινητού, όχι στη σελίδα.
+                val opts = list.take(8)
+                main.post {
+                    try {
+                        AlertDialog.Builder(this@MainActivity).setTitle(if (kind == "sms") "Σε ποιον το μήνυμα;" else "Ποιον να καλέσω;")
+                            .setItems(opts.map { it.first }.toTypedArray()) { _, which -> openContact(kind, opts[which].second, body) }
+                            .setNegativeButton("Άκυρο", null).show()
+                    } catch (_: Throwable) {}
+                }
+                return out.put("status", "many").toString()
             }
-            return out.put("status", "ok").put("name", pick.first).toString()
+            main.post { openContact(kind, pick.second, body) }
+            return out.put("status", "ok").toString()
         }
         @JavascriptInterface fun askCalendar() { main.post { try { requestPermissions(arrayOf(Manifest.permission.READ_CALENDAR), REQ_PERMS) } catch (_: Throwable) {} } }
         @JavascriptInterface fun copyText(text: String) {

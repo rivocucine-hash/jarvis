@@ -44,14 +44,20 @@ class MsgListener : NotificationListenerService() {
 
         /** Ευαίσθητο περιεχόμενο: κωδικοί μίας χρήσης, τράπεζες, κάρτες, πληρωμές. Τέτοια μηνύματα δεν διαβάζονται ποτέ. */
         private val SENSITIVE = Regex(
-            "(κωδικ|κωδ\\.|otp|pin\\b|password|passcode|verification|verify|επαληθευ|επιβεβαιωσ|τραπεζ|bank|iban|καρτα|καρτασ|card|υπολοιπο|balance|πληρωμ|payment|συναλλαγ|transaction|μεταφορα χρηματ|εμβασμα|χρεωσ|πιστωσ|ευρω|eur\\b|€|" +
+            "(κωδικ|κωδ|code|otp|pin\\b|password|passcode|verification|verify|login|log in|sign in|συνδεσ|2fa|authenticat|token|one-time|μιασ χρησησ|security|ασφαλει|επαληθευ|επιβεβαιωσ|τραπεζ|bank|iban|καρτα|καρτασ|card|υπολοιπο|balance|πληρωμ|payment|συναλλαγ|transaction|μεταφορα χρηματ|εμβασμα|χρεωσ|πιστωσ|ευρω|eur\\b|€|" +
                 "piraeus|πειραιωσ|alpha|eurobank|εθνικη|nbg|attica|optima|viva|revolut|paypal|n26|wise|winbank|e-banking|ebanking|taxis|gov\\.gr|aade|ααδε|εφκα|efka|iris)", RegexOption.IGNORE_CASE)
         private val CODE = Regex("(?<![0-9])[0-9]{4,8}(?![0-9])")
 
         private fun plain(s: String): String = java.text.Normalizer.normalize(s.lowercase(), java.text.Normalizer.Form.NFD).replace(Regex("\\p{M}+"), "").replace('ς', 'σ')
+        private val TIME_OR_DATE = Regex("(?<![0-9])[0-9]{1,2}[:.][0-9]{2}(?![0-9])|(?<![0-9])[0-9]{1,2}/[0-9]{1,2}(/[0-9]{2,4})?(?![0-9])")
+        private val DIGIT_SEPARATOR = Regex("(?<=[0-9])[ ._-](?=[0-9])")
         private fun sensitive(from: String, text: String): Boolean {
             val p = plain("$from $text")
-            return SENSITIVE.containsMatchIn(p) || CODE.containsMatchIn(text)
+            if (SENSITIVE.containsMatchIn(p)) return true
+            // Ώρες και ημερομηνίες («στις 18:30», «15/11») δεν είναι κωδικοί· κάθε άλλη σειρά 4+ ψηφίων θεωρείται κωδικός,
+            // ακόμα κι αν είναι γραμμένη με κενά, παύλες ή τελείες («12 34 56», «123-456»).
+            val digits = DIGIT_SEPARATOR.replace(TIME_OR_DATE.replace("$from $text", " "), "")
+            return CODE.containsMatchIn(digits) || Regex("[0-9]{4,}").containsMatchIn(digits)
         }
 
         /** null = δεν έχει δοθεί η άδεια «Πρόσβαση σε ειδοποιήσεις» (ή η υπηρεσία δεν έχει συνδεθεί ακόμα). */

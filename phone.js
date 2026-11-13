@@ -42,12 +42,10 @@ function contactDo(kind, name, body) {
   let r; try { r = JSON.parse(PA.contactAction(kind, name, body || '')); } catch { return null; }
   if (r.status === 'noperm') return { private: true, text: 'Χρειάζομαι άδεια για τις επαφές του κινητού. Πατήστε «Να επιτρέπεται» στο παράθυρο που άνοιξε και πείτε μου το ξανά.' };
   if (r.status === 'none') return null; // δεν βρέθηκε: συνεχίζει στις επαφές που έχετε περάσει στον JARVIS
-  if (r.status === 'many') {
-    const opts = r.options || [];
-    pending = (raw, nn) => { const i = (nn.match(/^(\d)/) || [])[1]; const pickName = i ? opts[+i - 1] : opts.find((o) => norm(o).includes(nn) || nn.split(' ').every((w) => norm(o).includes(w.slice(0, Math.max(3, w.length - 1))))); return pickName ? contactDo(kind, pickName, body) : 'Δεν κατάλαβα ποιον. Ακυρώθηκε.'; };
-    return { private: true, text: `Βρήκα ${opts.length} επαφές`, html: `Βρήκα ${opts.length} επαφές. Ποια;<br>` + opts.map((o, i) => `${i + 1}. ${escapeHtml(o)}`).join('<br>'), speak: `Βρήκα ${opts.length} επαφές. ${opts.map((o, i) => (i + 1) + ', ' + o).join('. ')}. Ποια; Πείτε τον αριθμό.` };
-  }
-  return { private: true, text: kind === 'sms' ? `Ετοίμασα το μήνυμα προς ${r.name}. Ελέγξτε το και πατήστε αποστολή.` : `Άνοιξα την κλήση προς ${r.name}. Πατήστε το πράσινο κουμπί για να καλέσετε.` };
+  if (r.status === 'busy') return { private: true, text: 'Περιμένετε ένα δευτερόλεπτο και πείτε το ξανά.' };
+  // Τα ονόματα και οι αριθμοί των επαφών μένουν στο κινητό: εδώ έρχεται μόνο αν βρέθηκε μία, πολλές ή καμία.
+  if (r.status === 'many') return { private: true, text: 'Βρήκα περισσότερες από μία επαφές με αυτό το όνομα. Διαλέξτε στην οθόνη του κινητού.' };
+  return { private: true, text: kind === 'sms' ? `Ετοίμασα το μήνυμα προς ${name}. Ελέγξτε το και πατήστε αποστολή.` : `Άνοιξα την κλήση προς ${name}. Πατήστε το πράσινο κουμπί για να καλέσετε.` };
 }
 if (PA && PA.contactAction) {
   intents.unshift(
