@@ -24,7 +24,7 @@ const Proactive = {
   /* Πρωινό ξύπνημα: μουσική 432Hz χαμηλά και μετά η πλήρης «Καλημέρα». */
   async morning() {
     this.last = Date.now();
-    if (window.Standby && Standby.on) Standby.hide();
+    if (typeof Standby !== 'undefined' && Standby.on) Standby.hide();
     try { if (!Music.n) Music.start('432', 20); } catch {}
     notify('Καλημέρα', 'Ώρα να ξυπνήσετε. Η πρωινή ενημέρωση είναι έτοιμη.');
     await sleep(6000);
@@ -63,7 +63,7 @@ intents.unshift(
     if (!m[3]) { if (/και μιση/.test(n)) mm = 30; else if (/και τεταρτο/.test(n)) mm = 15; else if (/παρα τεταρτο/.test(n)) { hh = (hh + 23) % 24; mm = 45; } }
     if (hh > 23 || mm > 59) return null;
     S.wakeTime = `${pad(hh)}:${pad(mm)}`; S.morningWake = true; saveSettings(); try { fillSettings(); } catch {}
-    return `Μάλιστα. Στις ${S.wakeTime} θα σας πω καλημέρα με μουσική 432. Την ενημέρωση θα τη λέω μόνο αν τη ζητήσετε. Αφήστε την εφαρμογή ανοιχτή και το κινητό στη φόρτιση.`;
+    return `Μάλιστα. Στις ${S.wakeTime} θα σας πω καλημέρα με μουσική 432. Την ενημέρωση θα τη λέω μόνο αν τη ζητήσετε. `;
   } },
   { re: /^(δοκιμασε το ξυπνημα|δοκιμη ξυπνηματοσ)$/, run: () => { Proactive.morning(); return { silent: true, text: '' }; } },
 );

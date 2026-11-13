@@ -654,7 +654,7 @@ const Wake = {
   },
   arm() {
     this.armed = true; Sound.listen(); $('#interim').textContent = 'Σας ακούω...'; clearTimeout(this.armT); this.armT = setTimeout(() => this.disarm(), 20000);
-    const line = callReply(); addMsg('ai', line); if (window.Standby) Standby.flash(line);
+    const line = callReply(); addMsg('ai', line); if (typeof Standby !== 'undefined') Standby.flash(line);
     Voice.speak(line).then(() => { if (!this.armed) return; Core.set('listening'); $('#interim').textContent = 'Σας ακούω...'; clearTimeout(this.armT); this.armT = setTimeout(() => this.disarm(), 10000); });
   },
   disarm() { this.armed = false; clearTimeout(this.armT); $('#interim').textContent = ''; if (Core.state === 'listening' && !Voice.listening) Core.set('idle'); },
@@ -813,8 +813,8 @@ function closeAll() {
   if (Music.nodes || Music.label && Music.playing) closed.push('τη μουσική');
   try { Music.stop(2); } catch {}
   if (Party.on) { Party.stop(); closed.push('το πάρτι'); }
-  if (window.Cook && Cook.r) { Cook.r = null; closed.push('τη συνταγή'); }
-  if (window.Standby && Standby.on) { Standby.hide(); closed.push('την αναμονή'); }
+  if (typeof Cook !== 'undefined' && Cook.r) { Cook.r = null; closed.push('τη συνταγή'); }
+  if (typeof Standby !== 'undefined' && Standby.on) { Standby.hide(); closed.push('την αναμονή'); }
   try { speechSynthesis.cancel(); } catch {}
   if (closed.length) return `Έκλεισα ${[...new Set(closed)].join(' και ')}${nmc()}.`;
   return 'Δεν έχω κάτι δικό μου ανοιχτό. Αν άνοιξα άλλη εφαρμογή ή ιστοσελίδα, πατήστε το κουμπί «πίσω» του κινητού για να γυρίσετε σε μένα.';

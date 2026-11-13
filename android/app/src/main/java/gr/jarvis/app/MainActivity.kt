@@ -158,7 +158,9 @@ class MainActivity : Activity() {
         t0 = android.os.SystemClock.elapsedRealtime()
         // Πάντα η πιο πρόσφατη έκδοση της σελίδας: σβήνεται η προσωρινή μνήμη του WebView (όχι τα δεδομένα του χρήστη).
         try { web.clearCache(true) } catch (_: Throwable) {}
-        web.loadUrl(URL + if (pendingWake) "?wake=1" else "")
+        val pendingMorning = intent?.getBooleanExtra("morning", false) == true
+        if (pendingMorning) { try { (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(MorningAlarm.NOTIF_ID) } catch (_: Throwable) {}; note("morning launch") }
+        web.loadUrl(URL + if (pendingMorning) "?morning=1" else if (pendingWake) "?wake=1" else "")
         pendingWake = false
         main.postDelayed(watchdog, 3000)
 
@@ -270,6 +272,10 @@ class MainActivity : Activity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent); setIntent(intent)
+        if (intent.getBooleanExtra("morning", false)) {
+            try { (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(MorningAlarm.NOTIF_ID) } catch (_: Throwable) {}
+            js("window.__nativeMorning && __nativeMorning()"); return
+        }
         if (intent.getBooleanExtra("wake", false)) js("window.__nativeWake ? __nativeWake() : (location.href='${URL}?wake=1')")
     }
 
@@ -462,6 +468,8 @@ class MainActivity : Activity() {
             } catch (e: Throwable) { note("calendar failed " + e) }
             return out.put("events", arr).toString()
         }
+        /** Ορίζει το πρωινό ξύπνημα στο ξυπνητήρι του Android, ώστε να χτυπά και με κλειστή εφαρμογή. */
+        @JavascriptInterface fun setMorningAlarm(hour: Int, minute: Int, on: Boolean): String { MorningAlarm.set(this@MainActivity, hour, minute, on); val r = MorningAlarm.schedule(this@MainActivity); note("morning alarm " + r); return r }
         @JavascriptInterface fun askCalendar() { main.post { try { requestPermissions(arrayOf(Manifest.permission.READ_CALENDAR), REQ_PERMS) } catch (_: Throwable) {} } }
         @JavascriptInterface fun copyText(text: String) {
             main.post {

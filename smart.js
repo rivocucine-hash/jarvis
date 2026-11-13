@@ -103,7 +103,7 @@ function learnedOffer() {
   }
   return null;
 }
-if (window.Proactive) {
+if (typeof Proactive !== 'undefined') {
   const baseTick = Proactive.tick.bind(Proactive);
   Proactive.tick = function () {
     const r = baseTick(); if (r) return r;

@@ -89,7 +89,7 @@ if (A) {
   Voice.setupSTT = () => true;
   Voice.toggle = function () {
     if (this.listening) { A.stopListen(); return; }
-    A.stopSpeak(); if (window.Standby && Standby.on) Standby.hide(); A.listen();
+    A.stopSpeak(); if (typeof Standby !== 'undefined' && Standby.on) Standby.hide(); A.listen();
   };
 
   /* ---------- Συνέχεια συζήτησης: μετά από φωνητική εντολή, ακούει ξανά μία φορά ---------- */
@@ -105,7 +105,7 @@ if (A) {
   const booted = () => !$('#hud').classList.contains('hidden');
   async function onWake() {
     if (!booted()) { await boot(); await sleep(600); }
-    if (window.Standby && Standby.on) Standby.hide();
+    if (typeof Standby !== 'undefined' && Standby.on) Standby.hide();
     if (Session.active) return A.wakeDone();
     const line = callReply(); Sound.listen(); addMsg('ai', line);
     await Voice.speak(line);
@@ -156,9 +156,17 @@ if (A) {
 
   /* ---------- Εκκίνηση χωρίς πάτημα κουμπιού ---------- */
   const wantWake = new URLSearchParams(location.search).get('wake') === '1';
+  const wantMorning = new URLSearchParams(location.search).get('morning') === '1';
+  if (wantMorning) history.replaceState(null, '', location.pathname);
+  /* Πρωινό ξύπνημα από το ξυπνητήρι του Android (δουλεύει και με κλειστή εφαρμογή). */
+  const runMorning = () => { if (typeof Proactive !== 'undefined' && once('wakeup-' + todayKey())) Proactive.morning(); };
+  window.__nativeMorning = () => { if (!booted()) setTimeout(window.__nativeMorning, 800); else runMorning(); };
+  let alarmSynced = '';
+  const syncAlarm = () => { if (!A.setMorningAlarm) return; const key = (S.wakeTime || '07:00') + '|' + (S.morningWake !== false); if (key === alarmSynced) return; alarmSynced = key; const [h, m] = (S.wakeTime || '07:00').split(':').map(Number); try { A.setMorningAlarm(h || 0, m || 0, S.morningWake !== false); } catch {} };
+  setInterval(syncAlarm, 15000);
   if (wantWake) history.replaceState(null, '', location.pathname);
   const baseFIn = featuresInit;
-  window.featuresInit = function () { baseFIn(); dn('fi native'); if (S.wake || S.handsFree) Wake.start(); else Wake.stop(); if (wantWake) setTimeout(onWake, 900); };
+  window.featuresInit = function () { baseFIn(); dn('fi native'); if (S.wake || S.handsFree) Wake.start(); else Wake.stop(); if (wantWake) setTimeout(onWake, 900); syncAlarm(); if (wantMorning) setTimeout(runMorning, 1500); };
   setTimeout(() => { if (!booted()) boot(); }, 400);
 
   intents.unshift({ re: /(αδειεσ jarvis|αδειεσ εφαρμογησ|ρυθμισεισ κινητου για jarvis|δεν ανοιγει με τζαρβισ|δεν ξυπναει)/, run: () => { A.openAppSettings(); return 'Άνοιξα τις ρυθμίσεις της εφαρμογής. Ελέγξτε ότι επιτρέπονται: μικρόφωνο, ειδοποιήσεις, «εμφάνιση πάνω από άλλες εφαρμογές», και ότι η μπαταρία δεν περιορίζεται.'; } });
