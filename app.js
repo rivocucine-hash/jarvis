@@ -510,6 +510,8 @@ const intents = [
 
   // youtube / μουσική
   { re: /(?:παιξε|βαλε|ακουσω)\s+(.+?)(?:\s+στο\s+(?:youtube|γιουτιουμπ))?$/, test: (n) => /(παιξε|μουσικη|τραγουδι|youtube|γιουτιουμπ)/.test(n) && !/(χρονομετρ|λιστα|ξυπνητηρ)/.test(n), run: (raw, n, m) => {
+    // Γενικό αίτημα («βάλε μουσική», «κάτι να ακούσω») → η δική μου χαλαρωτική μουσική, χωρίς να ανοίγει άλλη εφαρμογή.
+    if (!/(youtube|γιουτιουμπ)/.test(n) && /^(μου )?(κατι να ακουσω |λιγη |λιγο |καμια |κανα |μια |ενα )?(μουσικη|μουσικουλα|τραγουδι|τραγουδια|τραγουδακι|κατι)( να ακουσω| τωρα| παρακαλω)?$/.test(m[1])) return runIntents('Βάλε μουσική 432', norm('Βάλε μουσική 432'));
     const q = raw.replace(/^(παίξε|παιξε|βάλε|βαλε)\s+(μου\s+)?/i, '').replace(/\s+στο\s+(youtube|γιουτιούμπ)$/i, ''); setTimeout(() => openUrl('https://www.youtube.com/results?search_query=' + encodeURIComponent(q)), 900); return `Ανοίγω το YouTube για «${q}».`; } },
   // χάρτες
   { re: /(πηγαινε με|οδηγιεσ για|διαδρομη για|διαδρομη προσ|πωσ θα παω|πωσ πανε|πλοηγηση)\s+(?:στο\s+|στη\s+|στην\s+|στον\s+|για\s+)?(.+)/, run: (raw, n, m) => { const q = raw.split(/\s+/).slice(-m[2].split(' ').length).join(' '); setTimeout(() => openUrl('https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent(q)), 900); return `Υπολογίζω διαδρομή προς ${q}.`; } },

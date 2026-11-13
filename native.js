@@ -146,6 +146,9 @@ if (A) {
   Wake.stop = function () { this.on = false; A.setWakeEnabled(false); Banner.clear('wake'); };
   Wake.pause = () => {}; Wake.resume = () => {}; Wake.loop = () => {}; Wake.keepAwake = async () => {};
 
+  /* ---------- Άνοιγμα συνδέσμων: το κινητό τους ανοίγει στην κατάλληλη εφαρμογή (YouTube, Chrome, τηλέφωνο) ---------- */
+  openUrl = function (url) { try { location.href = url; } catch {} };
+
   /* ---------- Ειδοποιήσεις & αρχεία μέσω του κινητού ---------- */
   notify = async function (title, body) { try { A.notify(String(title), String(body)); } catch {} };
   exportBackup = async function () {
