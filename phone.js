@@ -20,7 +20,7 @@ const PA = window.AndroidJarvis;
 let msgSafety = null;
 window.__nativeMsgDone = () => { clearTimeout(msgSafety); Voice.speakingNow = false; Voice.lastEnd = Date.now(); if (Core.state === 'speaking') Core.set('idle'); try { PA.wakeDone(); } catch {} };
 function readMessages() {
-  if (!PA || !PA.readMessages) return { private: true, text: 'Η ανάγνωση μηνυμάτων γίνεται μόνο από την εφαρμογή Android, έκδοση 21 και πάνω.' };
+  if (!PA || !PA.readMessages) return { private: true, text: 'Η ανάγνωση μηνυμάτων αφαιρέθηκε: το Google Play Protect απέκλειε την εφαρμογή εξαιτίας της άδειας που χρειάζεται. Μπορώ να σας ανοίξω τα μηνύματα: πείτε «άνοιξε τα μηνύματα του Instagram» ή ανοίξτε το Viber και το WhatsApp από το κινητό.' };
   let r; try { r = JSON.parse(PA.readMessages(+S.rate || 1, +S.pitch || 1, S.voiceURI || '')); } catch { return { private: true, text: 'Δεν μπόρεσα να διαβάσω τα μηνύματα.' }; }
   if (r.status === 'noaccess') {
     pending = (raw, nn) => (/^(ναι|οκ|ok|ενταξει|βεβαια|ανοιξε|παμε)/.test(nn) ? (PA.askMsgAccess(), { private: true, text: 'Άνοιξα τις ρυθμίσεις. Ενεργοποιήστε το «JARVIS» στη λίστα. Αν είναι γκρι, πηγαίνετε Ρυθμίσεις → Εφαρμογές → JARVIS → ⋮ (πάνω δεξιά) → «Να επιτρέπονται οι περιορισμένες ρυθμίσεις» και δοκιμάστε ξανά.' }) : 'Εντάξει, δεν άνοιξα τίποτα.');
