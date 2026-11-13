@@ -144,6 +144,8 @@ class MainActivity : Activity() {
 
         pendingWake = intent?.getBooleanExtra("wake", false) == true
         t0 = android.os.SystemClock.elapsedRealtime()
+        // Πάντα η πιο πρόσφατη έκδοση της σελίδας: σβήνεται η προσωρινή μνήμη του WebView (όχι τα δεδομένα του χρήστη).
+        try { web.clearCache(true) } catch (_: Throwable) {}
         web.loadUrl(URL + if (pendingWake) "?wake=1" else "")
         pendingWake = false
         main.postDelayed(watchdog, 3000)
@@ -189,6 +191,8 @@ class MainActivity : Activity() {
         sb.append("Τελευταία απάντηση σελίδας: ").append(lastReply).append(" (πριν ").append(if (lastPong == 0L) "ποτέ" else ((now - lastPong) / 1000).toString() + "s").append(")\n")
         sb.append("--- Καταγραφή ---\n")
         diag.forEach { sb.append(it).append("\n") }
+        sb.append("--- Android: τελευταίοι τερματισμοί ---\n")
+        try { sb.append(CrashLog.exitInfo(this)).append("\n") } catch (_: Throwable) {}
         sb.append("--- Νήματα ---\n")
         try {
             Thread.getAllStackTraces().forEach { (t, st) ->
@@ -214,7 +218,7 @@ class MainActivity : Activity() {
             AlertDialog.Builder(this).setTitle("JARVIS: δεν ξεκίνησε").setCancelable(false)
                 .setMessage("Η αναφορά αντιγράφηκε ήδη. Στείλτε τη στον δημιουργό σας (επικόλληση).\n\n" + text.take(1200))
                 .setPositiveButton("Αντιγραφή ξανά") { _, _ -> try { copy() } catch (_: Throwable) {}; diagShown = false }
-                .setNegativeButton("Επανεκκίνηση") { _, _ -> diagShown = false; hudSeen = false; t0 = android.os.SystemClock.elapsedRealtime(); note("reload"); web.reload(); main.postDelayed(watchdog, 3000) }
+                .setNegativeButton("Επανεκκίνηση") { _, _ -> diagShown = false; recreate() }
                 .show()
         } catch (_: Throwable) { diagShown = false }
     }
