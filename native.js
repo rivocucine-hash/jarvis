@@ -147,7 +147,9 @@ if (A) {
   Wake.pause = () => {}; Wake.resume = () => {}; Wake.loop = () => {}; Wake.keepAwake = async () => {};
 
   /* ---------- Άνοιγμα συνδέσμων: το κινητό τους ανοίγει στην κατάλληλη εφαρμογή (YouTube, Chrome, τηλέφωνο) ---------- */
-  openUrl = function (url) { try { location.href = url; } catch {} };
+  // Μόνο ασφαλή είδη συνδέσμων: ποτέ javascript:, data: ή άλλα που θα εκτελούσαν κώδικα μέσα στην εφαρμογή.
+  const SAFE_SCHEMES = ['https:', 'http:', 'tel:', 'sms:', 'mailto:', 'geo:', 'viber:', 'whatsapp:'];
+  openUrl = function (url) { try { const u = new URL(String(url), location.href); if (!SAFE_SCHEMES.includes(u.protocol)) return; location.href = u.href; } catch {} };
 
   /* ---------- Ειδοποιήσεις & αρχεία μέσω του κινητού ---------- */
   notify = async function (title, body) { try { A.notify(String(title), String(body)); } catch {} };
