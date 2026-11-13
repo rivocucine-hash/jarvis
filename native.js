@@ -17,7 +17,7 @@ if (A) {
   // Μόνο η έτοιμη λίστα (voicesCached): η παλιά κλήση voices() περίμενε τη μηχανή ομιλίας και μπορούσε να παγώσει τη σελίδα.
   const nativeVoices = () => { try { return JSON.parse(A.voicesCached ? A.voicesCached() : '[]').map((v) => ({ name: v.name, voiceURI: v.name, lang: 'el-GR', localService: v.local, default: false })); } catch { return []; } };
   let speakToken = 0;
-  const shim = { speaking: false, pending: false, paused: false, onvoiceschanged: null, getVoices: nativeVoices, speak() {}, cancel() { speakToken++; Voice.speakingNow = false; A.stopSpeak(); if (window.__nativeTtsDone) window.__nativeTtsDone(); }, pause() {}, resume() {}, addEventListener() {}, removeEventListener() {} };
+  const shim = { speaking: false, pending: false, paused: false, onvoiceschanged: null, getVoices: nativeVoices, speak() {}, cancel() { speakToken++; Voice.speakingNow = false; try { if (A.bargeStop) A.bargeStop(); } catch {} A.stopSpeak(); if (window.__nativeTtsDone) window.__nativeTtsDone(); }, pause() {}, resume() {}, addEventListener() {}, removeEventListener() {} };
   try { Object.defineProperty(window, 'speechSynthesis', { value: shim, configurable: true }); } catch { window.speechSynthesis = shim; }
   if (!window.SpeechSynthesisUtterance) window.SpeechSynthesisUtterance = function (t) { this.text = t; };
   // Η λίστα φωνών ζητείται από το κινητό μόνο αφού ανοίξει η κύρια οθόνη, για να μην καθυστερεί την εκκίνηση.
@@ -47,6 +47,7 @@ if (A) {
     const my = ++speakToken;
     if (ttsDone) { const f = ttsDone; ttsDone = null; f(); }
     Voice.speakingNow = true; Core.set('speaking');
+    bargeOn();
     const parts = splitSentences(clean);
     for (let i = 0; i < parts.length; i++) {
       if (my !== speakToken) return;
@@ -55,8 +56,25 @@ if (A) {
       if (i < parts.length - 1) await sleep(/[:,]$/.test(parts[i]) ? 180 : 380);
     }
     if (my !== speakToken) return;
+    bargeOff();
     Voice.speakingNow = false; Voice.lastEnd = Date.now(); if (Core.state === 'speaking') Core.set('idle');
   };
+
+  /* ---------- Διακοπή με τη φωνή: αν μιλήσετε όσο μιλάω, σταματώ και σας ακούω ---------- */
+  let bargeAt = 0, bargeFalse = 0;
+  function bargeOn() { if (S.bargeIn === false || !A.bargeStart) return; try { A.bargeStart(S.bargeSens || 2); } catch {} }
+  function bargeOff() { if (!A.bargeStop) return; try { A.bargeStop(); } catch {} }
+  window.__nativeBarge = () => {
+    if (!Voice.speakingNow) return;
+    bargeAt = Date.now(); speechSynthesis.cancel(); Sound.listen();
+    lastVoiceCmd = Date.now(); setTimeout(() => { if (!Voice.listening) A.listen(); }, 120);
+  };
+  intents.unshift(
+    { re: /(μη διακοπτεσαι|μην διακοπτεσαι|μη σταματασ οταν μιλαω|κλεισε τη διακοπη|απενεργοποιησε τη διακοπη)/, run: () => { S.bargeIn = false; saveSettings(); return 'Κατανοητό. Δεν θα σταματώ όταν ακούω φωνή. Για διακοπή πατήστε τον αντιδραστήρα.'; } },
+    { re: /(να διακοπτεσαι|σταματα οταν μιλαω|ενεργοποιησε τη διακοπη|ανοιξε τη διακοπη)/, run: () => { S.bargeIn = true; S.bargeSens = 2; saveSettings(); return 'Μάλιστα. Όταν μιλήσετε από πάνω μου, θα σταματώ και θα σας ακούω.'; } },
+    { re: /(πιο ευαισθητη διακοπη|δεν με ακουσ οταν μιλασ|δεν σταματασ οταν μιλαω)/, run: () => { S.bargeIn = true; S.bargeSens = Math.min(3, (S.bargeSens || 2) + 1); saveSettings(); return 'Έκανα τη διακοπή πιο ευαίσθητη.'; } },
+    { re: /(λιγοτερο ευαισθητη διακοπη|σταματασ μονοσ σου|διακοπτεσαι μονοσ σου|κοβεσαι μονοσ σου)/, run: () => { S.bargeSens = Math.max(1, (S.bargeSens || 2) - 1); saveSettings(); return 'Έκανα τη διακοπή λιγότερο ευαίσθητη.'; } },
+  );
 
   /* ---------- Ακρόαση ---------- */
   let finalText = '', partialText = '', lastVoiceCmd = 0, missCount = 0;
@@ -86,7 +104,12 @@ if (A) {
     Voice.listening = false; $('#interim').textContent = ''; if (Core.state === 'listening') Core.set('idle'); Sound.stop();
     // Αν το κινητό δεν έδωσε τελικό κείμενο, κρατάμε ό,τι είχε ακούσει ως εκείνη τη στιγμή.
     const t = (finalText || partialText).trim(); finalText = ''; partialText = '';
-    if (t) { missCount = 0; lastVoiceCmd = Date.now(); handle(t); } else A.wakeDone();
+    if (t) { missCount = 0; if (Date.now() - bargeAt < 15000) bargeFalse = 0; lastVoiceCmd = Date.now(); handle(t); }
+    else {
+      // Διακοπή χωρίς λόγια = λάθος συναγερμός (άκουσα τη δική μου φωνή). Μετά από 2, γίνομαι λιγότερο ευαίσθητος· στο ελάχιστο, την κλείνω.
+      if (Date.now() - bargeAt < 15000 && ++bargeFalse >= 2) { bargeFalse = 0; if ((S.bargeSens || 2) > 1) { S.bargeSens = (S.bargeSens || 2) - 1; saveSettings(); } else { S.bargeIn = false; saveSettings(); toast('ΔΙΑΚΟΠΗ', 'Η διακοπή με τη φωνή έκλεισε, γιατί σε αυτό το κινητό άκουγα τη δική μου φωνή. Πείτε «να διακόπτεσαι» για να την ξανανοίξετε.', 9000); } }
+      A.wakeDone();
+    }
   };
   Voice.setupSTT = () => true;
   Voice.toggle = function () {

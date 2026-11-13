@@ -170,6 +170,9 @@ class MainActivity : Activity() {
         if (crash != null) showReport(crash) else askPermissions()
     }
 
+    /* ---------------- Διακοπή με τη φωνή ---------------- */
+    private val barge by lazy { BargeIn({ js("window.__nativeBarge && __nativeBarge()") }, { s -> note(s) }) }
+
     /* ---------------- Διάγνωση εκκίνησης ---------------- */
     @Volatile private var voicesJson = "[]"
     @Volatile private var voiceMap: Map<String, android.speech.tts.Voice> = emptyMap()
@@ -378,6 +381,7 @@ class MainActivity : Activity() {
     private fun startListening(offline: Boolean = false) {
         if (!hasMic()) { askPermissions(); js("window.__nativeSttError && __nativeSttError(9); window.__nativeSttEnd && __nativeSttEnd()"); return }
         if (!SpeechRecognizer.isRecognitionAvailable(this)) { js("window.__nativeSttError && __nativeSttError(-1); window.__nativeSttEnd && __nativeSttEnd()"); return }
+        barge.stop()
         WakeService.send(this, WakeService.ACTION_PAUSE)
         listeningNative = true
         sr?.destroy()
@@ -498,6 +502,9 @@ class MainActivity : Activity() {
         }
         /** Οι υπενθυμίσεις της σελίδας περνούν στο ξυπνητήρι του Android, ώστε να χτυπούν και με κλειστή εφαρμογή. */
         @JavascriptInterface fun syncReminders(json: String): Int { val n = MorningAlarm.syncReminders(this@MainActivity, json); note("reminders synced " + n); return n }
+        /** Όσο μιλάει ο βοηθός: ακούει αν ο χρήστης μιλήσει από πάνω του. sensitivity 1 (λίγο) έως 3 (πολύ). */
+        @JavascriptInterface fun bargeStart(sensitivity: Int) { if (!hasMic() || listeningNative) return; barge.start(when (sensitivity) { 3 -> 1.5; 1 -> 2.6; else -> 1.9 }) }
+        @JavascriptInterface fun bargeStop() { barge.stop() }
         @JavascriptInterface fun askCalendar() { main.post { try { requestPermissions(arrayOf(Manifest.permission.READ_CALENDAR), REQ_PERMS) } catch (_: Throwable) {} } }
         @JavascriptInterface fun copyText(text: String) {
             main.post {

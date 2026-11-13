@@ -191,3 +191,41 @@ intents.unshift({ re: /^(ανοιξε|δειξε μου|δειξε|θελω να
   const [k] = TAB_WORDS.find(([, re]) => re.test(n)); memTab = k; renderMem(); $('#memory').classList.remove('hidden'); Sound.whoosh();
   return { text: 'Άνοιξα την καρτέλα. Γράψτε στο πεδίο επάνω και πατήστε «+» για κάθε εγγραφή. Όταν τελειώσετε, πείτε «κλείσε το».', speak: 'Άνοιξα την καρτέλα. Γράψτε και πατήστε το συν για κάθε εγγραφή.' };
 } });
+
+/* ---------------- ΥΠΑΓΟΡΕΥΣΗ ΔΕΔΟΜΕΝΩΝ ----------------
+   «Θέλω να γεμίσω τα ψώνια / τη δουλειά / τις συνήθειες / τα φάρμακα»: ο χρήστης τα λέει ένα-ένα (ή πολλά μαζί)
+   και ο βοηθός τα περνάει μόνος του, μέχρι να ακούσει «τέλος». */
+const splitItems = (raw) => raw.replace(/^(βάλε|βαλε|πρόσθεσε|προσθεσε|γράψε|γραψε|και|επίσης|επισης|ακόμα|ακομα|θέλω|θελω|έχω|εχω)\s+/i, '').split(/\s*,\s*|\s+(?:και|κι)\s+(?!μισ|τεταρτ|τέταρτ)/i).map((s) => s.trim().replace(/[.!]+$/, '')).filter((s) => s.length > 1);
+const capFirst = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+const DICT = {
+  shopping: { name: 'στα ψώνια', ask: 'Πείτε μου τι να βάλω στα ψώνια.', add: (raw) => splitItems(raw).map((x) => { addShop(x); return x; }) },
+  work: { name: 'στις εργασίες της δουλειάς', ask: 'Πείτε μου τις εργασίες της δουλειάς, μία-μία.', add: (raw) => { const t = capFirst(raw.replace(/^(πρέπει|πρεπει|έχω|εχω)\s+(?=να\s)/i, '').replace(/[.!]+$/, '')); work.push({ id: uid(), text: t, project: '', prio: 2, due: '', done: false, created: Date.now() }); saveWork(); return [t]; } },
+  habits: { name: 'στις συνήθειες', ask: 'Πείτε μου τις συνήθειες που θέλετε να παρακολουθώ.', add: (raw) => splitItems(raw).map((x) => { const nm2 = capFirst(x); if (!habits.some((h) => norm(h.name) === norm(nm2))) { habits.push({ id: uid(), name: nm2, log: {}, best: 0 }); Store.set('habits', habits); } return nm2; }) },
+  pills: { name: 'στα φάρμακα', ask: 'Πείτε μου κάθε φάρμακο ή βιταμίνη με την ώρα του. Για παράδειγμα: βιταμίνη D στις 9.', add: (raw) => {
+    const n = norm(raw), times = []; const i = n.search(/ (στισ|το πρωι|το βραδυ|το μεσημερι|πρωι|βραδυ|μεσημερι|καθε)/);
+    const tail = i > 0 ? n.slice(i) : ''; for (const m of tail.matchAll(/([0-9]{1,2})(?:[:.]([0-9]{2}))?/g)) { const h = +m[1]; if (h < 24) times.push(pad(h) + ':' + (m[2] || '00')); }
+    if (!times.length) { if (/πρωι/.test(tail)) times.push('09:00'); if (/μεσημερι/.test(tail)) times.push('14:00'); if (/βραδυ/.test(tail)) times.push('21:00'); }
+    if (!times.length) times.push('09:00');
+    const name = capFirst((i > 0 ? raw.slice(0, i) : raw).replace(/^(παίρνω|παιρνω|πίνω|πινω|ένα|ενα|μία|μια)\s+/i, '').trim());
+    const ex = pills.find((p) => norm(p.name) === norm(name)); if (ex) ex.times = [...new Set([...ex.times, ...times])].sort(); else pills.push({ id: uid(), name, times }); Store.set('pills', pills);
+    return [name + ' (' + times.join(', ') + ')'];
+  } },
+  notes: { name: 'στις σημειώσεις', ask: 'Πείτε μου τι να σημειώσω.', add: (raw) => { notes.unshift({ id: Date.now(), text: raw, at: Date.now() }); Store.set('notes', notes); return [raw]; } },
+};
+function dictate(kind) {
+  const D = DICT[kind]; let count = 0;
+  memTab = kind; try { renderMem(); $('#memory').classList.remove('hidden'); } catch {}
+  const step = (raw, nn) => {
+    if (/^(τελοσ|τελειωσα|τελειωσαμε|αυτα|αυτα ειναι|αυτα ηταν|ενταξει|οκ|ok|σταματα|στοπ|κλεισε|κλειστο|κλεισε το|τιποτα αλλο|οχι|οχι αλλο|τιποτα|φτανει|ευχαριστω)$/.test(nn)) {
+      try { $('#memory').classList.add('hidden'); } catch {}
+      return count ? `Πέρασα ${count} ${count === 1 ? 'εγγραφή' : 'εγγραφές'} ${D.name}${nmc()}. Τα θυμάμαι.` : 'Εντάξει, δεν πέρασα κάτι.';
+    }
+    let added = []; try { added = D.add(raw) || []; } catch (e) { console.error(e); }
+    count += added.length; try { renderMem(); } catch {}
+    pending = step;
+    return added.length ? { text: '✓ ' + added.join(', '), speak: count % 4 === 1 ? 'Το πέρασα. Άλλο; Πείτε «τέλος» όταν τελειώσετε.' : 'Το πέρασα. Άλλο;' } : { text: 'Δεν το κατάλαβα. Πείτε το ξανά ή πείτε «τέλος».' };
+  };
+  pending = step;
+  return `${D.ask} Όταν τελειώσετε, πείτε «τέλος».`;
+}
+intents.unshift({ re: /^(θελω να (γεμισω|συμπληρωσω|γραψω|βαλω|περασω|σου πω)|να (γεμισω|συμπληρωσω|περασω|σου πω)|γεμισε|συμπληρωσε|περασε|ασ γεμισουμε|ασ συμπληρωσουμε|παμε να γεμισουμε|να σου πω) (.+)$/, test: (n) => TAB_WORDS.some(([k, re]) => DICT[k] && re.test(n)), run: (raw, n) => dictate(TAB_WORDS.find(([k, re]) => DICT[k] && re.test(n))[0]) });
