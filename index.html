@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="el">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#02070d">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="JARVIS">
+<title>JARVIS</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Jura:wght@400;500;600;700&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="bg-grid"></div>
+<div class="scanline"></div>
+<div class="alert-flash"></div>
+
+<!-- BOOT -->
+<section id="boot">
+  <div class="boot-inner">
+    <div class="boot-logo">J.A.R.V.I.S.</div>
+    <div class="boot-sub">Προσωπικό Σύστημα Τεχνητής Νοημοσύνης</div>
+    <div id="bootLog" class="boot-log"></div>
+    <div class="boot-bar"><div id="bootBar"></div></div>
+    <button id="bootBtn" class="btn-glow">ΕΝΕΡΓΟΠΟΙΗΣΗ</button>
+    <div class="boot-hint">Πατήστε για εκκίνηση συστημάτων</div>
+  </div>
+</section>
+
+<!-- MAIN HUD -->
+<main id="hud" class="hidden">
+  <header class="top">
+    <div class="brand"><span class="dot"></span><span id="brandName">JARVIS</span><small id="netState">v7 · ONLINE</small></div>
+    <div class="top-right">
+      <div id="clock" class="clock">--:--</div>
+      <button id="settingsBtn" class="icon-btn" aria-label="Ρυθμίσεις">
+        <svg viewBox="0 0 24 24"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <section class="widgets">
+    <div class="widget" data-cmd="Πώς είναι ο καιρός;">
+      <div class="w-label">ΚΑΙΡΟΣ</div>
+      <div class="w-val" id="weatherVal">--°</div>
+      <div class="w-sub" id="weatherSub">σάρωση...</div>
+    </div>
+    <div class="widget" data-cmd="Τι έχω σήμερα;">
+      <div class="w-label">ΗΜΕΡΑ <span id="moonIco"></span></div>
+      <div class="w-val" id="dateVal">--</div>
+      <div class="w-sub" id="dayVal">--</div>
+    </div>
+    <div class="widget" data-cmd="Ήπια ένα ποτήρι νερό">
+      <div class="w-label">ΝΕΡΟ +</div>
+      <div class="w-val" id="waterVal">0.0L</div>
+      <div class="w-meter"><div id="waterBar"></div></div>
+    </div>
+    <div class="widget" data-cmd="Κάνε σάρωση">
+      <div class="w-label">ΕΝΕΡΓΕΙΑ</div>
+      <div class="w-val" id="batVal">--%</div>
+      <div class="w-meter"><div id="batBar"></div></div>
+    </div>
+  </section>
+
+  <section id="banners" class="banners"></section>
+
+  <section class="core-wrap">
+    <canvas id="core"></canvas>
+    <button id="micBtn" class="mic" aria-label="Μίλα">
+      <svg viewBox="0 0 24 24"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Z"/><path d="M19 11a7 7 0 0 1-14 0M12 18v3"/></svg>
+    </button>
+    <div id="stateLabel" class="state">ΣΕ ΑΝΑΜΟΝΗ</div>
+    <div id="interim" class="interim"></div>
+  </section>
+
+  <section id="log" class="log" aria-live="polite"></section>
+
+  <section class="chips" id="chips">
+    <button data-cmd="Καλημέρα">☀ Καλημέρα</button>
+    <button data-cmd="Τι δουλειές έχω;">💼 Δουλειά</button>
+    <button data-cmd="Πρωινή ρουτίνα">🌅 Ρουτίνα</button>
+    <button data-cmd="Καληνύχτα">🌙 Καληνύχτα</button>
+    <button data-cmd="Εβδομαδιαία αναφορά">📊 Αναφορά</button>
+    <button data-cmd="Πώς πάνε οι συνήθειες;">🔥 Συνήθειες</button>
+    <button data-cmd="Κάνε μου αναπνοές">◎ Ανάσες</button>
+    <button data-cmd="Αναπνοές Wim Hof">❄ Wim Hof</button>
+    <button data-cmd="Κρύο ντους">🚿 Κρύο ντους</button>
+    <button data-cmd="Γιόγκα">🧘 Γιόγκα</button>
+    <button data-cmd="Τι να μαγειρέψω;">🍳 Συνταγές</button>
+    <button data-cmd="Τι ψώνια έχω;">🛒 Ψώνια</button>
+    <button data-cmd="Τι φάρμακα έχω σήμερα;">💊 Φάρμακα</button>
+    <button data-cmd="Σαν σήμερα">📜 Σαν σήμερα</button>
+    <button data-cmd="Τι να φορέσω σήμερα;">👔 Ντύσιμο</button>
+    <button data-cmd="Περιποίηση προσώπου">🧴 Περιποίηση</button>
+    <button data-cmd="Κρασί της ημέρας">🍷 Κρασί</button>
+    <button data-cmd="Προσφορές ταξιδιών">✈ Ταξίδια</button>
+    <button data-cmd="Τι φάση έχει η σελήνη;">🌙 Σελήνη</button>
+    <button data-cmd="Έλεγξε τα σάιτ μου">🌐 Σάιτ</button>
+    <button data-cmd="Μηνύματα Instagram">📩 Instagram</button>
+    <button data-cmd="Διαλογισμός">☯ Διαλογισμός</button>
+    <button data-cmd="Βάλε μουσική 432">♪ 432Hz</button>
+    <button data-cmd="Πρόγραμμα γυμναστικής">💪 Γυμναστική</button>
+    <button data-cmd="Ήπια ένα ποτήρι νερό">💧 +1</button>
+    <button data-cmd="Ειδήσεις τεχνολογίας">⌁ Tech</button>
+    <button data-cmd="Αθλητικά">⚽ Αθλητικά</button>
+    <button data-cmd="Τι ταινίες παίζουν στους κινηματογράφους;">🎬 Σινεμά</button>
+    <button data-cmd="Ξεκίνα pomodoro">⧗ Pomodoro</button>
+    <button data-cmd="Πότε να κοιμηθώ;">☾ Ύπνος</button>
+    <button data-cmd="Πόσα ξόδεψα αυτόν τον μήνα;">€ Έξοδα</button>
+    <button data-cmd="Πρωτόκολλο πάρτι">🎉 Πάρτι</button>
+    <button data-cmd="Τι μπορείς να κάνεις;">? Βοήθεια</button>
+    <button id="memBtn" type="button">◈ Δεδομένα</button>
+  </section>
+
+  <form id="inputForm" class="input-bar" autocomplete="off">
+    <input id="textInput" type="text" placeholder="Γράψτε μια εντολή..." enterkeyhint="send">
+    <button type="submit" class="send" aria-label="Αποστολή">
+      <svg viewBox="0 0 24 24"><path d="M4 12h14M13 6l6 6-6 6"/></svg>
+    </button>
+  </form>
+</main>
+
+<!-- SESSION (αναπνοές / διαλογισμός / γυμναστική) -->
+<div id="session" class="session hidden">
+  <div id="sessTitle" class="sess-title"></div>
+  <div class="sess-ring">
+    <div class="sess-orbit"></div>
+    <div id="sessCircle" class="sess-circle"></div>
+    <div class="sess-text"><div id="sessPhase" class="sess-phase"></div><div id="sessCount" class="sess-count"></div></div>
+  </div>
+  <div id="sessSub" class="sess-sub"></div>
+  <button id="sessAct" class="btn-glow sess-act hidden" type="button">ΑΝΑΣΑ ΤΩΡΑ</button>
+  <div class="sess-progress"><div id="sessBar"></div></div>
+  <button id="sessStop" class="btn-line" type="button">ΤΕΡΜΑΤΙΣΜΟΣ</button>
+</div>
+
+<!-- DATA CENTER -->
+<div id="memory" class="sheet hidden">
+  <div class="sheet-panel">
+    <div class="sheet-head"><span>ΚΕΝΤΡΟ ΔΕΔΟΜΕΝΩΝ</span><button class="close" data-close>✕</button></div>
+    <div id="memTabs" class="tabs"></div>
+    <div id="memHead" class="mem-head"></div>
+    <form id="memForm" class="mem-form" autocomplete="off"></form>
+    <ul id="memList" class="mem-list"></ul>
+  </div>
+</div>
+
+<!-- SETTINGS -->
+<div id="settings" class="sheet hidden">
+  <div class="sheet-panel">
+    <div class="sheet-head"><span>ΡΥΘΜΙΣΕΙΣ ΣΥΣΤΗΜΑΤΟΣ</span><button class="close" data-close>✕</button></div>
+    <div class="form">
+      <div class="group">ΠΡΟΦΙΛ</div>
+      <label>Το όνομά σας<input data-k="userName" type="text"></label>
+      <label>Όνομα βοηθού<input data-k="assistant" type="text"></label>
+      <label>Πόλεις για τον καιρό (με κόμμα)<input data-k="cities" type="text" placeholder="Αθήνα, Αγρίνιο"></label>
+      <div class="row2">
+        <label>Βάρος (κιλά) για στόχο νερού<input data-k="weight" type="number" inputmode="numeric" min="0" max="250"></label>
+        <label>Συνήθης ώρα αφύπνισης<input data-k="wakeTime" type="time"></label>
+      </div>
+      <div class="row2">
+        <label>Αγαπημένες ομάδες<input data-k="teams" type="text" placeholder="Ολυμπιακός, ΑΕΚ"></label>
+        <label>Μηνιαίος προϋπολογισμός €<input data-k="budget" type="number" inputmode="numeric" min="0"></label>
+      </div>
+      <div class="row2">
+        <label>Ζώδιο (για το ωροσκόπιο)
+          <select data-k="zodiac"><option value="">—</option><option>Κριός</option><option>Ταύρος</option><option>Δίδυμοι</option><option>Καρκίνος</option><option>Λέων</option><option>Παρθένος</option><option>Ζυγός</option><option>Σκορπιός</option><option>Τοξότης</option><option>Αιγόκερως</option><option>Υδροχόος</option><option>Ιχθείς</option></select>
+        </label>
+        <label>Κατανάλωση (λίτρα/100 χλμ)<input data-k="consumption" type="number" inputmode="decimal" step="0.1" min="2" max="25"></label>
+      </div>
+      <label>Τιμή καυσίμου €/λίτρο (για υπολογισμό διαδρομών)<input data-k="fuelPrice" type="number" inputmode="decimal" step="0.001" min="0"></label>
+      <label class="check"><input data-k="autoBrief" type="checkbox"> Πρωινή ενημέρωση στο πρώτο άνοιγμα της ημέρας</label>
+      <label class="check"><input data-k="waterRemind" type="checkbox"> Υπενθυμίσεις για νερό</label>
+      <label class="check"><input data-k="habitRemind" type="checkbox"> Ειδοποίηση στις 21:00 αν κινδυνεύει κάποιο σερί</label>
+      <label class="check"><input data-k="moodPrompt" type="checkbox"> Ερώτηση διάθεσης κάθε βράδυ στις 21:30</label>
+
+      <div class="row2">
+        <label>Τύπος δέρματος
+          <select data-k="skinType"><option>μικτό</option><option>λιπαρό</option><option>ξηρό</option><option>ευαίσθητο</option></select>
+        </label>
+        <label>Πόλη αναχώρησης (πτήσεις)<input data-k="homeAirport" type="text" placeholder="Athens"></label>
+      </div>
+      <label>Τα σάιτ μου (με κόμμα)<input data-k="sites" type="text" placeholder="mysite.gr, eshop.gr"></label>
+      <label class="check"><input data-k="skinRemind" type="checkbox"> Υπενθύμιση βραδινής περιποίησης προσώπου (22:30)</label>
+      <label class="check"><input data-k="moonRemind" type="checkbox"> Ειδοποίηση για πανσέληνο και νέα σελήνη</label>
+
+      <div class="group">ΔΟΥΛΕΙΑ & ΒΡΑΔΥ</div>
+      <div class="row2">
+        <label>Αρχή βάρδιας<input data-k="workStart" type="time"></label>
+        <label>Τέλος βάρδιας<input data-k="workEnd" type="time"></label>
+      </div>
+      <label class="check"><input data-k="workBrief" type="checkbox"> Ενημέρωση εργασιών στην αρχή και σύνοψη στο τέλος της βάρδιας</label>
+      <label class="check"><input data-k="workWeekend" type="checkbox"> Δουλεύω και Σαββατοκύριακα</label>
+      <label>Ώρα για «καληνύχτα»<input data-k="nightTime" type="time"></label>
+      <label class="check"><input data-k="autoNight" type="checkbox"> Αυτόματη βραδινή σύνοψη και καληνύχτα</label>
+      <div class="row2">
+        <label class="check"><input data-k="weeklyReport" type="checkbox"> Εβδομαδιαία αναφορά κάθε Κυριακή</label>
+        <label>Ώρα αναφοράς<input data-k="reportTime" type="time"></label>
+      </div>
+
+      <div class="group">ΠΡΩΙΝΗ ΡΟΥΤΙΝΑ</div>
+      <label class="check"><input data-k="rBrief" type="checkbox"> Πρωινή ενημέρωση</label>
+      <label>Αναπνοές
+        <select data-k="rBreath"><option value="energy">Ενεργειακή αναπνοή (1 λεπτό)</option><option value="wimhof">Wim Hof (1 γύρος)</option><option value="box">Τετράγωνη αναπνοή</option><option value="none">Χωρίς αναπνοές</option></select>
+      </label>
+      <label class="check"><input data-k="rYoga" type="checkbox"> Χαιρετισμός στον Ήλιο (γιόγκα)</label>
+      <label class="check"><input data-k="rCold" type="checkbox"> Κρύο ντους</label>
+      <label class="check"><input data-k="rAffirm" type="checkbox"> Θετικές επιβεβαιώσεις στο τέλος</label>
+
+      <div class="group">ΦΩΝΗ & ΗΧΟΣ</div>
+      <label>Φωνή<select id="sVoice" data-k="voiceURI"></select></label>
+      <div class="row2">
+        <label>Ταχύτητα <span id="sRateV"></span><input data-k="rate" type="range" min="0.7" max="1.4" step="0.05"></label>
+        <label>Τόνος <span id="sPitchV"></span><input data-k="pitch" type="range" min="0.5" max="1.5" step="0.05"></label>
+      </div>
+      <label class="check"><input data-k="handsFree" type="checkbox"> <b>Συνεχής ακρόαση</b>: μιλάτε και απαντά, χωρίς κουμπί και χωρίς να πείτε το όνομά του (κρατά την οθόνη αναμμένη)</label>
+      <label class="check"><input data-k="wake" type="checkbox"> Φωνητική ενεργοποίηση: πείτε «Τζάρβις...» χωρίς να πατάτε κουμπί (κρατά την οθόνη αναμμένη, καταναλώνει μπαταρία)</label>
+      <div class="row2">
+        <label class="check"><input data-k="standbyAuto" type="checkbox"> Μαύρη οθόνη αναμονής όταν δεν την αγγίζω</label>
+        <label>Μετά από (λεπτά)<input data-k="standbyMin" type="number" inputmode="numeric" min="1" max="30"></label>
+      </div>
+      <label class="check"><input data-k="convo" type="checkbox"> Λειτουργία συνομιλίας (ακούει ξανά μετά την απάντηση)</label>
+      <label class="check"><input data-k="sounds" type="checkbox"> Ηχητικά εφέ</label>
+      <label class="check"><input data-k="hum" type="checkbox"> Βόμβος αντιδραστήρα (ambient)</label>
+
+      <div class="group">ΕΜΦΑΝΙΣΗ</div>
+      <label>Θέμα πανοπλίας
+        <select data-k="theme">
+          <option value="reactor">Arc Reactor (γαλάζιο)</option>
+          <option value="mark">Mark (κόκκινο-χρυσό)</option>
+          <option value="gold">Χρυσό</option>
+          <option value="stealth">Stealth (λευκό)</option>
+          <option value="vibranium">Vibranium (μωβ)</option>
+          <option value="emerald">Σμαραγδί</option>
+        </select>
+      </label>
+      <div class="row2">
+        <label>Στυλ πυρήνα
+          <select data-k="coreStyle"><option value="reactor">Αντιδραστήρας</option><option value="hologram">Ολόγραμμα</option><option value="orb">Ενεργειακή σφαίρα</option></select>
+        </label>
+        <label>Ήχος εκκίνησης
+          <select data-k="bootStyle"><option value="classic">Κλασικός</option><option value="cinematic">Κινηματογραφικός</option><option value="minimal">Διακριτικός</option></select>
+        </label>
+      </div>
+
+      <div class="ai-box">
+        <div class="ai-title">ΔΩΡΕΑΝ ΚΛΕΙΔΙΑ (προαιρετικά)</div>
+        <p><b>Gemini</b> για ελεύθερη συζήτηση σε οποιοδήποτε θέμα: aistudio.google.com → Get API key.</p>
+        <label>Κλειδί Gemini API<input data-k="geminiKey" type="password" placeholder="AIza..."></label>
+        <label>Μοντέλο Gemini<input data-k="model" type="text"></label>
+        <p><b>TMDB</b> για τις ταινίες που παίζονται στους κινηματογράφους: themoviedb.org → Λογαριασμός → Ρυθμίσεις → API.</p>
+        <label>Κλειδί TMDB (API Key)<input data-k="tmdbKey" type="password"></label>
+        <p><b>PageSpeed</b> για αυτόματο έλεγχο ταχύτητας και SEO στα σάιτ σας: console.cloud.google.com → APIs → PageSpeed Insights API → Credentials → API key.</p>
+        <label>Κλειδί PageSpeed<input data-k="psiKey" type="password"></label>
+      </div>
+      <div class="group">ΑΝΤΙΓΡΑΦΟ ΑΣΦΑΛΕΙΑΣ</div>
+      <p id="backupInfo" class="backup-info"></p>
+      <div class="row2">
+        <button id="backupExport" class="btn-line" type="button">⇧ ΕΞΑΓΩΓΗ</button>
+        <button id="backupImport" class="btn-line" type="button">⇩ ΕΠΑΝΑΦΟΡΑ</button>
+      </div>
+      <input id="backupFile" type="file" accept=".json,application/json" hidden>
+      <label class="check"><input data-k="backupRemind" type="checkbox"> Υπενθύμιση κάθε εβδομάδα αν δεν έχει γίνει αντίγραφο</label>
+      <button id="testVoice" class="btn-line" type="button">ΔΟΚΙΜΗ ΦΩΝΗΣ</button>
+      <button id="resetAll" class="btn-line danger" type="button">ΔΙΑΓΡΑΦΗ ΟΛΩΝ ΤΩΝ ΔΕΔΟΜΕΝΩΝ</button>
+    </div>
+  </div>
+</div>
+
+<!-- STANDBY: μαύρη οθόνη που συνεχίζει να ακούει -->
+<div id="standby" class="standby hidden">
+  <div class="sb-dot"></div>
+  <div id="sbClock" class="sb-clock"></div>
+  <div id="sbText" class="sb-text"></div>
+  <div id="sbHint" class="sb-hint"></div>
+</div>
+
+<div id="toasts" class="toasts"></div>
+
+<script src="app.js"></script>
+<script src="features.js"></script>
+<script src="life.js"></script>
+<script src="extra.js"></script>
+<script src="work.js"></script>
+<script src="report.js"></script>
+<script src="backup.js"></script>
+<script src="offline.js"></script>
+</body>
+</html>
