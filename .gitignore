@@ -1,2 +1,8 @@
 .claude/
 qr.html
+.signing/
+android/app/src/main/assets/model-en-us/
+android/.gradle/
+android/build/
+android/app/build/
+native-test.html
