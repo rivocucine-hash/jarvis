@@ -206,7 +206,9 @@ class WakeService : Service(), RecognitionListener {
         if (paused || speech != null) return
         try {
             log("7 δημιουργία αναγνωριστή")
-            val rec = Recognizer(m, 16000f, "[\"jarvis\", \"[unk]\"]")
+            // Λέξεις-«δολώματα» που μοιάζουν ηχητικά: απορροφούν άλλες ομιλίες, ώστε να μην ξυπνάει κατά λάθος.
+            val rec = Recognizer(m, 16000f, "[\"jarvis\", \"service\", \"travis\", \"harvest\", \"nervous\", \"jar\", \"this\", \"yes\", \"the\", \"hey\", \"charge\", \"garbage\", \"[unk]\"]")
+            rec.setWords(true)
             log("8 άνοιγμα μικροφώνου")
             speech = SpeechService(rec, 16000f).also { it.startListening(this) }
             log("9 ΑΚΟΥΕΙ για «Τζάρβις»")
@@ -230,8 +232,16 @@ class WakeService : Service(), RecognitionListener {
     override fun onTimeout() { stopListening(); startListening() }
 
     private fun check(hypothesis: String?) {
-        val text = try { JSONObject(hypothesis ?: "{}").optString("text") } catch (_: Exception) { "" }
-        if (!text.split(" ").contains("jarvis")) return
+        val json = try { JSONObject(hypothesis ?: "{}") } catch (_: Exception) { JSONObject() }
+        val words = json.optString("text").trim().split(" ").filter { it.isNotEmpty() && it != "[unk]" }
+        // Αυστηρός έλεγχος: μόνο η λέξη «jarvis» (μόνη της ή μετά από «hey»), και με υψηλή βεβαιότητα.
+        if (words.isEmpty() || words.last() != "jarvis" || words.size > 2 || (words.size == 2 && words[0] != "hey")) return
+        val arr = json.optJSONArray("result")
+        if (arr != null) {
+            var conf = 0.0
+            for (i in 0 until arr.length()) { val o = arr.optJSONObject(i) ?: continue; if (o.optString("word") == "jarvis") conf = maxOf(conf, o.optDouble("conf", 0.0)) }
+            if (conf < 0.85) { log("αγνοήθηκε «jarvis» με βεβαιότητα " + String.format(java.util.Locale.US, "%.2f", conf)); return }
+        }
         val now = SystemClock.elapsedRealtime()
         if (now - lastWake < 4000) return
         lastWake = now
