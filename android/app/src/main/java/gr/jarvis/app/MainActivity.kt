@@ -66,8 +66,11 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         // Αν την προηγούμενη φορά η εφαρμογή έκλεισε, δείχνουμε πρώτα την αιτία, πριν ξεκινήσει οτιδήποτε.
         if (prefs.getBoolean("wakeStarting", false)) {
-            prefs.edit().remove("wakeStarting").putBoolean("wake", false)
-                .putString("lastCrash", "Η ακρόαση «Τζάρβις» (Vosk) έκλεισε την εφαρμογή κατά την εκκίνησή της (native crash).\nAndroid ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT}) · ${Build.MANUFACTURER} ${Build.MODEL} · ${Build.SUPPORTED_ABIS.joinToString()}").commit()
+            val header = "Η ακρόαση «Τζάρβις» (Vosk) έκλεισε την εφαρμογή κατά την εκκίνησή της.\nΈκδοση εφαρμογής: " + appVersion() +
+                "\nAndroid " + Build.VERSION.RELEASE + " (SDK " + Build.VERSION.SDK_INT + ") · " + Build.MANUFACTURER + " " + Build.MODEL + " · " + Build.SUPPORTED_ABIS.joinToString()
+            val old = prefs.getString("lastCrash", null)
+            prefs.edit().remove("wakeStarting").putBoolean("wake", false).putInt("wakeBlockedVersion", appVersion())
+                .putString("lastCrash", header + "\n\n" + CrashLog.exitInfo(this) + (if (old != null) "\n\n" + old else "")).commit()
         }
         val earlyCrash = CrashLog.take(this, "lastCrash")
         if (earlyCrash != null) { crashScreen = true; showCrashScreen(earlyCrash); return }
@@ -188,7 +191,9 @@ class MainActivity : Activity() {
 
     /* ---------------- Άδειες ---------------- */
     private fun hasMic() = checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
-    private fun wakeEnabled() = prefs.getBoolean("wake", true)
+    private fun wakeBlocked() = prefs.getInt("wakeBlockedVersion", -1) == appVersion()
+    private fun wakeEnabled() = prefs.getBoolean("wake", true) && !wakeBlocked()
+    private fun appVersion(): Int = try { packageManager.getPackageInfo(packageName, 0).let { if (Build.VERSION.SDK_INT >= 28) it.longVersionCode.toInt() else @Suppress("DEPRECATION") it.versionCode } } catch (_: Throwable) { 0 }
 
     private fun askPermissions() {
         val need = mutableListOf<String>()
@@ -298,7 +303,10 @@ class MainActivity : Activity() {
         @JavascriptInterface fun listen() { main.post { startListening() } }
         @JavascriptInterface fun stopListen() { main.post { sr?.stopListening() } }
 
+        @JavascriptInterface fun isWakeBlocked(): Boolean = wakeBlocked()
+        @JavascriptInterface fun retryWake() { prefs.edit().remove("wakeBlockedVersion").putBoolean("wake", true).apply(); main.post { if (hasMic()) WakeService.start(this@MainActivity) } }
         @JavascriptInterface fun setWakeEnabled(on: Boolean) {
+            if (on && wakeBlocked()) return
             prefs.edit().putBoolean("wake", on).apply()
             main.post { if (on) { if (hasMic()) WakeService.start(this@MainActivity) else askPermissions() } else WakeService.send(this@MainActivity, WakeService.ACTION_STOP) }
         }

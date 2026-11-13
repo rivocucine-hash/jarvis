@@ -39,6 +39,32 @@ object CrashLog {
         } catch (_: Throwable) {}
     }
 
+    /** Λεπτομέρειες από το ίδιο το Android για το τελευταίο κλείσιμο (και για native crash). */
+    fun exitInfo(ctx: Context): String {
+        if (Build.VERSION.SDK_INT < 30) return "(χωρίς λεπτομέρειες σε αυτή την έκδοση Android)"
+        return try {
+            val am = ctx.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+            val list = am.getHistoricalProcessExitReasons(ctx.packageName, 0, 3)
+            val sb = StringBuilder()
+            for (info in list) {
+                sb.append("reason=").append(info.reason).append(" status=").append(info.status).append(" desc=").append(info.description ?: "").append("\n")
+                if (info.reason == android.app.ApplicationExitInfo.REASON_CRASH_NATIVE || info.reason == android.app.ApplicationExitInfo.REASON_CRASH) {
+                    val bytes = try { info.traceInputStream?.use { it.readBytes() } } catch (_: Throwable) { null }
+                    if (bytes != null) {
+                        // Το ίχνος είναι δυαδικό: κρατάμε μόνο τα αναγνώσιμα κομμάτια (ονόματα βιβλιοθηκών, μήνυμα τερματισμού).
+                        val cur = StringBuilder(); val parts = ArrayList<String>()
+                        for (b in bytes) { val c = b.toInt() and 0xFF; if (c in 32..126) cur.append(c.toChar()) else { if (cur.length >= 6) parts.add(cur.toString()); cur.setLength(0) } }
+                        if (cur.length >= 6) parts.add(cur.toString())
+                        val keep = parts.filter { it.contains("vosk", true) || it.contains("jna", true) || it.contains("jnidispatch", true) || it.contains("abort", true) || it.contains("SIG") || it.contains("fault", true) || it.contains("kaldi", true) || it.contains("libc", true) || it.contains("Cause", true) || it.contains("page", true) }
+                        sb.append((if (keep.isNotEmpty()) keep else parts).distinct().take(60).joinToString("\n")).append("\n")
+                    }
+                    break
+                }
+            }
+            sb.toString().take(4000)
+        } catch (e: Throwable) { "(exitInfo: " + e + ")" }
+    }
+
     fun take(ctx: Context, key: String): String? {
         val p = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val v = p.getString(key, null) ?: return null

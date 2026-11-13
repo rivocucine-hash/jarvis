@@ -75,7 +75,11 @@ if (A) {
   window.__nativeWake = () => { onWake(); };
 
   /* ---------- Η συνεχής ακρόαση γίνεται από την υπηρεσία του κινητού ---------- */
-  Wake.start = function () { this.on = true; A.setWakeEnabled(true); Banner.set('wake', '🎙 Πείτε «Τζάρβις» οποιαδήποτε στιγμή', () => { S.wake = false; S.handsFree = false; saveSettings(); fillSettings(); this.stop(); }); return true; };
+  const wakeBlocked = () => { try { return !!(A.isWakeBlocked && A.isWakeBlocked()); } catch { return false; } };
+  intents.unshift({ re: /(δοκιμασε ξανα την ακροαση|ξαναδοκιμασε την ακροαση|ενεργοποιησε την ακροαση τζαρβισ)/, run: () => { if (A.retryWake) A.retryWake(); Banner.clear('wake'); return 'Δοκιμάζω ξανά την ακρόαση «Τζάρβις». Αν η εφαρμογή κλείσει, ανοίξτε την ξανά και θα απενεργοποιηθεί μόνη της.'; } });
+  Wake.start = function () {
+    if (wakeBlocked()) { this.on = false; Banner.set('wake', '⚠ Η ακρόαση «Τζάρβις» δεν λειτουργεί ακόμα σε αυτό το κινητό. Πατήστε το μικρόφωνο.', () => Banner.clear('wake')); return false; }
+    this.on = true; A.setWakeEnabled(true); Banner.set('wake', '🎙 Πείτε «Τζάρβις» οποιαδήποτε στιγμή', () => { S.wake = false; S.handsFree = false; saveSettings(); fillSettings(); this.stop(); }); return true; };
   Wake.stop = function () { this.on = false; A.setWakeEnabled(false); Banner.clear('wake'); };
   Wake.pause = () => {}; Wake.resume = () => {}; Wake.loop = () => {}; Wake.keepAwake = async () => {};
 
