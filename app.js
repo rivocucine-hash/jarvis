@@ -351,8 +351,10 @@ function hasAI() { const p = S.aiProvider || 'gemini'; return p === 'gemini' ? !
 const FREE_AI_URL = 'https://text.pollinations.ai/openai';
 let freeAiNext = 0;
 async function askFreeAI(sys) {
-  if (!navigator.onLine || Date.now() < freeAiNext) return null;
-  const messages = [{ role: 'system', content: sys }, ...aiHistory.slice(-6).map((m) => ({ role: m.role === 'model' ? 'assistant' : 'user', content: m.parts.map((x) => x.text).join('') }))];
+  // Μόνο αν ο χρήστης το έχει ενεργοποιήσει ρητά (S.freeAI). Στέλνεται μόνο η τρέχουσα φράση, όχι το ιστορικό.
+  if (!S.freeAI || !navigator.onLine || Date.now() < freeAiNext) return null;
+  const last = aiHistory[aiHistory.length - 1];
+  const messages = [{ role: 'system', content: sys }, { role: 'user', content: last ? last.parts.map((x) => x.text).join('') : '' }];
   const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 20000);
   try {
     const r = await fetch(FREE_AI_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: 'openai', messages }), signal: ctl.signal });
@@ -363,7 +365,8 @@ async function askFreeAI(sys) {
 }
 async function askAI(text) {
   if (!hasAI()) {
-    const sysF = `Είσαι ο ${S.assistant}, ευγενικός προσωπικός βοηθός με ύφος Βρετανού μπάτλερ. Μιλάς ελληνικά, στον πληθυντικό ευγενείας, και αποκαλείς τον χρήστη «${addressAs()}». Απαντάς άμεσα, σε 1-3 προτάσεις, χωρίς markdown, λίστες ή emoji, γιατί η απάντηση διαβάζεται φωναχτά. Σημερινή ημερομηνία και ώρα: ${new Date().toLocaleString('el-GR')}.${window.aiCommands ? aiCommands() : ''}`;
+    if (!S.freeAI) return null;
+    const sysF = `Είσαι ο ${S.assistant}, ευγενικός προσωπικός βοηθός με ύφος Βρετανού μπάτλερ. Μιλάς ελληνικά, στον πληθυντικό ευγενείας, και αποκαλείς τον χρήστη «κύριε». Απαντάς άμεσα, σε 1-3 προτάσεις, χωρίς markdown, λίστες ή emoji, γιατί η απάντηση διαβάζεται φωναχτά. Σημερινή ημερομηνία και ώρα: ${new Date().toLocaleString('el-GR')}.${window.aiCommands ? aiCommands() : ''}`;
     aiHistory.push({ role: 'user', parts: [{ text }] }); while (aiHistory.length > 16) aiHistory.shift();
     const o = await askFreeAI(sysF);
     if (o) aiHistory.push({ role: 'model', parts: [{ text: o }] }); else aiHistory.pop();
@@ -582,9 +585,13 @@ async function handle(raw) {
   // fallback: ο εγκέφαλος ΤΝ απαντά ή διαλέγει εντολή
   const ai = await askAI(raw);
   if (ai) {
-    const cm = ai.match(/ΕΝΤΟΛΗ:\s*«?([^»\n]+)/i);
-    if (cm) { const c = cm[1].trim().replace(/[.»"]+$/, ''); const o = await runIntents(c, norm(c)); if (o != null) return respond(o); }
-    const clean = ai.replace(/ΕΝΤΟΛΗ:[^\n]*/gi, '').trim();
+    // Ο εγκέφαλος μπορεί να διαλέξει ΜΟΝΟ εντολή από τη σταθερή, ακίνδυνη λίστα (aiAllowed), και μόνο αν όλη η απάντηση είναι αυτή η γραμμή.
+    const cm = ai.trim().match(/^«?ΕΝΤΟΛΗ:\s*«?([^»\n]+?)[.»"\s]*$/i);
+    if (cm) {
+      const key = norm(cm[1].replace(/[;?]/g, '')); const allowed = window.aiAllowed ? aiAllowed().find((c) => norm(c.replace(/[;?]/g, '')) === key) : null;
+      if (allowed) { const o = await runIntents(allowed, norm(allowed)); if (o != null) return respond(o); }
+    }
+    const clean = ai.replace(/«?ΕΝΤΟΛΗ:[^\n]*/gi, '').trim();
     if (clean) return respond(clean);
   }
   // τελευταία προσπάθεια: βικιπαίδεια, αφού αφαιρεθούν οι λέξεις ερώτησης
