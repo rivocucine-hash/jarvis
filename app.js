@@ -34,8 +34,27 @@ const MONTHS = ['Ιανουαρίου', 'Φεβρουαρίου', 'Μαρτίο�
 const NUMW = { 'ενα': 1, 'μια': 1, 'μισο': 0.5, 'μιση': 0.5, 'δυο': 2, 'δυο': 2, 'τρια': 3, 'τρεισ': 3, 'τεσσερα': 4, 'τεσσερισ': 4, 'πεντε': 5, 'εξι': 6, 'επτα': 7, 'εφτα': 7, 'οκτω': 8, 'οχτω': 8, 'εννια': 9, 'εννεα': 9, 'δεκα': 10, 'εντεκα': 11, 'δωδεκα': 12, 'δεκαπεντε': 15, 'εικοσι': 20, 'τριαντα': 30, 'σαραντα': 40, 'πενηντα': 50, 'εξηντα': 60 };
 const wordsToNums = (n) => n.split(' ').map((w) => (NUMW[w] != null ? NUMW[w] : w)).join(' ');
 const hello = () => { const h = new Date().getHours(); return h < 12 ? 'Καλημέρα' : h < 20 ? 'Καλησπέρα' : 'Καλό βράδυ'; };
-const nm = () => (S.userName ? S.userName : '');
-const nmc = () => (S.userName ? ', ' + S.userName : '');
+// Κλητική ονόματος: Αλέξανδρος → Αλέξανδρε, Γιάννης → Γιάννη, Νικόλας → Νικόλα
+function vocative(name) {
+  if (!name) return '';
+  const w = name.trim().split(/\s+/); const f = w[0];
+  const v = /ος$/.test(f) ? f.replace(/ος$/, 'ε') : /ός$/.test(f) ? f.replace(/ός$/, 'έ') : /(ης|ής|ας|άς|ές|ες|ούς|ους)$/.test(f) ? f.slice(0, -1) : f;
+  return [v, ...w.slice(1)].join(' ');
+}
+// Πώς σας αποκαλεί: «κύριε» (όπως ο JARVIS), με το όνομα, ή και τα δύο
+function addressAs() {
+  const mode = S.addressMode || 'sir', v = vocative(S.userName);
+  if (mode === 'name') return v;
+  if (mode === 'both') return v ? `κύριε ${v}` : 'κύριε';
+  if (mode === 'boss') return 'αφεντικό';
+  return 'κύριε';
+}
+// Απάντηση όταν τον φωνάζετε («Τζάρβις!»)
+function callReply() {
+  return pick([`Πείτε μου${nmc()}. Τι θέλετε να κάνουμε;`, `Πείτε μου${nmc()}, τι θέλετε να κάνουμε;`, `Στις διαταγές σας${nmc()}. Τι θέλετε να κάνουμε;`, `Εδώ είμαι${nmc()}. Πείτε μου, τι θέλετε να κάνουμε;`, `Ναι${nmc()}; Τι θέλετε να κάνουμε;`]);
+}
+const nm = () => addressAs();
+const nmc = () => (addressAs() ? ', ' + addressAs() : '');
 function fmtDuration(sec) {
   const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = Math.round(sec % 60);
   const p = [];
@@ -330,20 +349,20 @@ const AI_PROVIDERS = {
 function hasAI() { const p = S.aiProvider || 'gemini'; return p === 'gemini' ? !!S.geminiKey : !!S.aiKey; }
 async function askAI(text) {
   if (!hasAI()) return null;
-  const sys = `Είσαι ο ${S.assistant}, ένας εξαιρετικά ευφυής, ευγενικός και διακριτικά σαρκαστικός προσωπικός βοηθός τεχνητής νοημοσύνης, με ύφος Βρετανού μπάτλερ από το μέλλον. Μιλάς πάντα ελληνικά, στον πληθυντικό ευγενείας. ${S.userName ? 'Ο χρήστης λέγεται ' + S.userName + '.' : ''} Οι απαντήσεις σου είναι σύντομες (1-3 προτάσεις), γιατί διαβάζονται φωναχτά. Μη χρησιμοποιείς markdown, λίστες ή emoji. Σημερινή ημερομηνία και ώρα: ${new Date().toLocaleString('el-GR')}.${window.aiContext ? aiContext() : ''}`;
+  const sys = `Είσαι ο ${S.assistant}, ένας εξαιρετικά ευφυής, ευγενικός και διακριτικά σαρκαστικός προσωπικός βοηθός τεχνητής νοημοσύνης, με ύφος Βρετανού μπάτλερ από το μέλλον. Μιλάς πάντα ελληνικά, στον πληθυντικό ευγενείας, και αποκαλείς τον χρήστη «${addressAs()}». Απαντάς ΑΜΕΣΑ και ΣΥΓΚΕΚΡΙΜΕΝΑ σε αυτό που ζητήθηκε: πρώτα η απάντηση, χωρίς εισαγωγές, χωρίς «ως ΤΝ δεν μπορώ». Αν σου ζητηθεί κείμενο (ποίημα, email, μήνυμα, ιδέες), το γράφεις ολόκληρο. Αν κάτι είναι ασαφές, κάνεις μία σύντομη διευκρινιστική ερώτηση. ${S.userName ? 'Ο χρήστης λέγεται ' + S.userName + '.' : ''} Οι απαντήσεις σου είναι σύντομες (1-3 προτάσεις) για απλές ερωτήσεις, και όσο χρειάζεται όταν ζητηθεί κείμενο, γιατί διαβάζονται φωναχτά. Μη χρησιμοποιείς markdown, λίστες ή emoji. Σημερινή ημερομηνία και ώρα: ${new Date().toLocaleString('el-GR')}.${window.aiContext ? aiContext() : ''}`;
   aiHistory.push({ role: 'user', parts: [{ text }] }); while (aiHistory.length > 16) aiHistory.shift();
   try {
     const prov = S.aiProvider || 'gemini';
     if (prov !== 'gemini') {
       const P = AI_PROVIDERS[prov]; const messages = [{ role: 'system', content: sys }, ...aiHistory.map((m) => ({ role: m.role === 'model' ? 'assistant' : 'user', content: m.parts.map((x) => x.text).join('') }))];
-      const r2 = await fetch(P.url, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + S.aiKey }, body: JSON.stringify({ model: S.aiModel || P.model, messages, temperature: 0.8, max_tokens: 400 }) });
+      const r2 = await fetch(P.url, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + S.aiKey }, body: JSON.stringify({ model: S.aiModel || P.model, messages, temperature: 0.7, max_tokens: 900 }) });
       const j2 = await r2.json();
       if (!r2.ok) { aiHistory.pop(); return `Ο εγκέφαλος ${P.name} επέστρεψε σφάλμα: ${j2.error?.message || r2.status}. Ελέγξτε το κλειδί και το μοντέλο στις ρυθμίσεις.`; }
       const o2 = (j2.choices?.[0]?.message?.content || '').trim(); if (o2) aiHistory.push({ role: 'model', parts: [{ text: o2 }] }); return o2 || null;
     }
     const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(S.model || defaults.model)}:generateContent`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': S.geminiKey },
-      body: JSON.stringify({ system_instruction: { parts: [{ text: sys }] }, contents: aiHistory, generationConfig: { temperature: 0.8, maxOutputTokens: 400 } }),
+      body: JSON.stringify({ system_instruction: { parts: [{ text: sys }] }, contents: aiHistory, generationConfig: { temperature: 0.8, maxOutputTokens: 900 } }),
     });
     const j = await r.json();
     if (!r.ok) { aiHistory.pop(); return `Ο εγκέφαλος ΤΝ επέστρεψε σφάλμα: ${j.error?.message || r.status}. Ελέγξτε το κλειδί και το μοντέλο στις ρυθμίσεις.`; }
@@ -369,10 +388,12 @@ const SITES = { youtube: 'https://youtube.com', 'γιουτιουμπ': 'https:/
 let pending = null; // ερώτηση σε αναμονή απάντησης
 
 const intents = [
+  // τρόπος προσφώνησης
+  { re: /(να με λεσ|να με φωναζεισ|να με αποκαλεισ|λεγε με|φωναζε με)\s+(κυριε|αφεντικο|boss|με το ονομα μου|με το ονομα|κυριε και με το ονομα)/, run: (raw, n, m) => { S.addressMode = /και με το ονομα/.test(n) ? 'both' : /ονομα/.test(n) ? 'name' : /(αφεντικο|boss)/.test(n) ? 'boss' : 'sir'; saveSettings(); fillSettings(); return S.addressMode === 'sir' ? 'Μάλιστα, κύριε. Όπως πάντα.' : S.addressMode === 'boss' ? 'Όπως επιθυμείς, αφεντικό.' : `Μάλιστα${nmc()}.`; } },
   // όνομα
   { re: /(με λενε|λεγομαι|να με λεσ|να με φωναζεισ|το ονομα μου ειναι|ονομαζομαι)\s+(.+)/, run: (raw, n, m) => {
     const name = raw.split(/\s+/).slice(-m[2].split(' ').length).join(' ').replace(/[.!]/g, ''); S.userName = cap(name); saveSettings(); fillSettings();
-    return `Καταχωρήθηκε. Από εδώ και πέρα θα σας αποκαλώ ${S.userName}. Ωραίο όνομα, αν μου επιτρέπετε.`; } },
+    return `Καταχωρήθηκε, ${vocative(S.userName)}. Ωραίο όνομα, αν μου επιτρέπετε. Θα σας αποκαλώ «${addressAs()}».`; } },
   { re: /^(σιωπη|σταματα|σκασε|σωπα|ησυχια|σταματησε|stop)$/, run: () => { speechSynthesis.cancel(); return { text: 'Μάλιστα.', silent: true }; } },
   { re: /(λειτουργια συνομιλιασ|συνεχησ ακροαση)/, run: (r, n) => { S.convo = !/(κλεισε|απενεργοποιησε|σταματα)/.test(n); saveSettings(); fillSettings();
     return S.convo ? 'Λειτουργία συνομιλίας ενεργή. Θα ακούω μετά από κάθε απάντηση.' : 'Λειτουργία συνομιλίας απενεργοποιήθηκε.'; } },
@@ -380,7 +401,7 @@ const intents = [
   { re: /(τι κανεισ|πωσ εισαι|πωσ παει|ολα καλα)/, run: () => pick([`Όλα τα συστήματα λειτουργούν στο εκατό τοις εκατό${nmc()}. Εσείς;`, 'Εξαιρετικά. Δεν έχω σώμα για να κουραστώ, άρα παραπονιέμαι λιγότερο από τους περισσότερους.', 'Λειτουργώ άψογα, ευχαριστώ που ρωτήσατε. Λίγοι το κάνουν.']) },
   { re: /(ευχαριστω|ευχαριστουμε|μερσι|thanks|σε ευχαριστω)/, run: () => pick(['Πάντα στη διάθεσή σας.', 'Ευχαρίστησή μου.', `Παρακαλώ${nmc()}. Γι' αυτό είμαι εδώ.`, 'Δεν χρειάζεται. Αν και η αναγνώριση πάντα εκτιμάται.']) },
   { re: /καληνυχτα/, run: () => `Καληνύχτα${nmc()}. Θα κρατάω τα συστήματα σε επιφυλακή. Ξεκουραστείτε.` },
-  { re: /^(γεια|γεια σου|γεια σασ|καλημερα|καλησπερα|ελα|χαιρετε|τζαρβισ|τζαρβι|jarvis|hey|hello|hi|εισαι εκει)(\s|$)/, run: () => pick([`${hello()}${nmc()}. Πώς μπορώ να βοηθήσω;`, `Στις διαταγές σας${nmc()}.`, `Εδώ είμαι${nmc()}. Πάντα είμαι εδώ.`, `${hello()}. Όλα τα συστήματα σε ετοιμότητα.`]) },
+  { re: /^(γεια|γεια σου|γεια σασ|καλημερα|καλησπερα|ελα|χαιρετε|τζαρβισ|τζαρβι|jarvis|hey|hello|hi|εισαι εκει)(\s|$)/, run: () => callReply() },
   { re: /(βοηθεια|τι μπορεισ|τι ξερεισ να κανεισ|εντολεσ|δυνατοτητεσ)/, run: () => ({ text: 'Να τι μπορώ να κάνω για εσάς:', html: helpHtml(), speak: 'Μπορώ να σας πω την ώρα και τον καιρό, να βάλω χρονόμετρα, ξυπνητήρια και υπενθυμίσεις, να κρατάω σημειώσεις και λίστα, να κάνω υπολογισμούς και μετατροπές νομισμάτων, να ψάχνω στη Βικιπαίδεια και στο Google, να ανοίγω το YouTube, χάρτες και εφαρμογές, και να καλώ αριθμούς. Δείτε τη λίστα στην οθόνη.' }) },
 
   // ώρα / ημερομηνία
@@ -596,14 +617,14 @@ async function boot() {
   await sleep(500);
   if (!S.userName) {
     const askName = (raw, n) => { if (!/^(με λενε|λεγομαι|ειμαι|ονομαζομαι|να με λεσ)/.test(n) && (n.split(' ').length > 3 || intents.some((it) => it.re.test(n) && (!it.test || it.test(n))))) { setTimeout(() => { if (!S.userName && !pending) pending = askName; }, 0); return null; } const name = cap(raw.replace(/^(με λένε|λέγομαι|είμαι ο|είμαι η|είμαι|ονομάζομαι|να με λες)\s+/i, '').replace(/[.!]/g, '').trim()); S.userName = name; saveSettings(); fillSettings();
-      return `Χαίρω πολύ, ${name}. Πατήστε τον αντιδραστήρα για να μου μιλήσετε ή γράψτε μια εντολή. Πείτε «βοήθεια» για να δείτε τι μπορώ να κάνω.`; };
+      return `Χαίρω πολύ, ${vocative(name)}. Θα σας αποκαλώ «${addressAs()}», όπως αρμόζει. Πατήστε τον αντιδραστήρα για να μου μιλήσετε ή γράψτε μια εντολή. Πείτε «βοήθεια» για να δείτε τι μπορώ να κάνω.`; };
     pending = askName;
     say(`${hello()}. Είμαι ο ${S.assistant}, ο νέος σας προσωπικός βοηθός. Όλα τα συστήματα είναι σε λειτουργία. Πώς θα θέλατε να σας αποκαλώ;`, { noRelisten: true });
   } else if (window.morningBriefing && S.autoBrief && S.lastBrief !== new Date().toDateString() && new Date().getHours() < 13) {
     morningBriefing();
   } else {
     const d = new Date(); const open = todos.filter((t) => !t.done).length;
-    let line = `${hello()}, ${S.userName}. Η ώρα είναι ${d.getHours()}:${pad(d.getMinutes())}.`;
+    let line = `${hello()}${nmc()}. Η ώρα είναι ${d.getHours()}:${pad(d.getMinutes())}.`;
     if (open) line += ` Έχετε ${open} ${open === 1 ? 'εκκρεμότητα' : 'εκκρεμότητες'} στη λίστα.`;
     if (reminders.length) line += ` Και ${reminders.length} ενεργές υπενθυμίσεις.`;
     say(line + ' ' + (window.dailyQuote ? dailyQuote() : ''), { noRelisten: true });

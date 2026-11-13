@@ -159,6 +159,9 @@
     <div class="form">
       <div class="group">ΠΡΟΦΙΛ</div>
       <label>Το όνομά σας<input data-k="userName" type="text"></label>
+      <label>Πώς να σας αποκαλεί
+        <select data-k="addressMode"><option value="sir">«Κύριε» (όπως ο JARVIS)</option><option value="name">Με το όνομά μου</option><option value="both">«Κύριε» + όνομα</option><option value="boss">«Αφεντικό»</option></select>
+      </label>
       <label>Όνομα βοηθού<input data-k="assistant" type="text"></label>
       <label>Πόλεις για τον καιρό (με κόμμα)<input data-k="cities" type="text" placeholder="Αθήνα, Αγρίνιο"></label>
       <div class="row2">
@@ -216,6 +219,10 @@
 
       <div class="group">ΦΩΝΗ & ΗΧΟΣ</div>
       <label>Φωνή<select id="sVoice" data-k="voiceURI"></select></label>
+      <div class="row2">
+        <button id="jarvisVoiceBtn" class="btn-line" type="button">🎙 ΦΩΝΗ JARVIS</button>
+        <button id="voiceTourBtn" class="btn-line" type="button">🎧 ΔΟΚΙΜΗ ΦΩΝΩΝ</button>
+      </div>
       <div class="row2">
         <label>Ταχύτητα <span id="sRateV"></span><input data-k="rate" type="range" min="0.7" max="1.4" step="0.05"></label>
         <label>Τόνος <span id="sPitchV"></span><input data-k="pitch" type="range" min="0.5" max="1.5" step="0.05"></label>
@@ -300,6 +307,7 @@
 <script src="work.js"></script>
 <script src="report.js"></script>
 <script src="backup.js"></script>
+<script src="voice.js"></script>
 <script src="offline.js"></script>
 </body>
 </html>

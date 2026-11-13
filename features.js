@@ -652,7 +652,11 @@ const Wake = {
     r.onend = () => { this.rec = null; if (this.on && !this.paused) setTimeout(() => this.loop(), 300); };
     this.rec = r; try { r.start(); } catch { this.rec = null; setTimeout(() => this.loop(), 1500); }
   },
-  arm() { this.armed = true; Sound.listen(); Core.set('listening'); $('#interim').textContent = 'Σας ακούω...'; clearTimeout(this.armT); this.armT = setTimeout(() => this.disarm(), 8000); },
+  arm() {
+    this.armed = true; Sound.listen(); $('#interim').textContent = 'Σας ακούω...'; clearTimeout(this.armT); this.armT = setTimeout(() => this.disarm(), 20000);
+    const line = callReply(); addMsg('ai', line); if (window.Standby) Standby.flash(line);
+    Voice.speak(line).then(() => { if (!this.armed) return; Core.set('listening'); $('#interim').textContent = 'Σας ακούω...'; clearTimeout(this.armT); this.armT = setTimeout(() => this.disarm(), 10000); });
+  },
   disarm() { this.armed = false; clearTimeout(this.armT); $('#interim').textContent = ''; if (Core.state === 'listening' && !Voice.listening) Core.set('idle'); },
 };
 window.Wake = Wake;

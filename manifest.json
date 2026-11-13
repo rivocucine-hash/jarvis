@@ -12,5 +12,11 @@
   "icons": [
     { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
     { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Καλημέρα", "short_name": "Καλημέρα", "url": "./index.html?cmd=Καλημέρα", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Πρωινή ρουτίνα", "short_name": "Ρουτίνα", "url": "./index.html?cmd=Πρωινή ρουτίνα", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Τι δουλειές έχω", "short_name": "Δουλειά", "url": "./index.html?cmd=Τι δουλειές έχω", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Καληνύχτα", "short_name": "Καληνύχτα", "url": "./index.html?cmd=Καληνύχτα", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] }
   ]
 }
