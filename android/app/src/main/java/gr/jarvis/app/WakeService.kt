@@ -65,18 +65,28 @@ class WakeService : Service(), RecognitionListener {
 
     override fun onCreate() {
         super.onCreate()
-        ensureChannels(this)
+        CrashLog.install(this)
+        try { ensureChannels(this) } catch (e: Throwable) { CrashLog.note(this, "channels", e) }
         try {
             if (Build.VERSION.SDK_INT >= 29) startForeground(1, ongoing(), ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
             else startForeground(1, ongoing())
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             // Το Android δεν επιτρέπει έναρξη ακρόασης από το παρασκήνιο: θα ξεκινήσει μόλις ανοίξει η εφαρμογή.
-            Log.e(TAG, "foreground", e); stopSelf(); return
+            Log.e(TAG, "foreground", e); CrashLog.note(this, "WakeService.startForeground", e); stopSelf(); return
         }
         running = true
-        StorageService.unpack(this, "model-en-us", "model",
-            { m: Model -> model = m; startListening() },
-            { e: java.io.IOException -> Log.e(TAG, "model", e) })
+        try {
+            StorageService.unpack(this, "model-en-us", "model",
+                { m: Model -> model = m; startListening() },
+                { e: java.io.IOException -> Log.e(TAG, "model", e); fail("Vosk model", e) })
+        } catch (e: Throwable) { fail("Vosk unpack", e) }
+    }
+
+    /** Αν η ακρόαση αποτύχει, την απενεργοποιούμε χωρίς να κλείσει η εφαρμογή. */
+    private fun fail(where: String, e: Throwable) {
+        CrashLog.note(this, "WakeService: $where", e)
+        getSharedPreferences("jarvis", Context.MODE_PRIVATE).edit().putBoolean("wake", false).apply()
+        main.post { stopSelf() }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -114,7 +124,8 @@ class WakeService : Service(), RecognitionListener {
         try {
             val rec = Recognizer(m, 16000f, "[\"jarvis\", \"[unk]\"]")
             speech = SpeechService(rec, 16000f).also { it.startListening(this) }
-        } catch (e: Exception) { Log.e(TAG, "listen", e); main.postDelayed({ startListening() }, 3000) }
+        } catch (e: UnsatisfiedLinkError) { fail("Vosk native", e) }
+        catch (e: Throwable) { Log.e(TAG, "listen", e); CrashLog.note(this, "WakeService.listen", e); main.postDelayed({ startListening() }, 3000) }
     }
 
     private fun stopListening() {

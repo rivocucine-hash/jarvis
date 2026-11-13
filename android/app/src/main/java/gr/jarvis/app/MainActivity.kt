@@ -62,6 +62,7 @@ class MainActivity : Activity() {
     private val prefs by lazy { getSharedPreferences("jarvis", Context.MODE_PRIVATE) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        CrashLog.install(this)
         super.onCreate(savedInstanceState)
         if (Build.VERSION.SDK_INT >= 27) { setShowWhenLocked(true); setTurnScreenOn(true) }
         else window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON)
@@ -96,7 +97,7 @@ class MainActivity : Activity() {
             override fun onGeolocationPermissionsShowPrompt(origin: String, callback: GeolocationPermissions.Callback) { callback.invoke(origin, false, false) }
         }
 
-        tts = TextToSpeech(this) { status ->
+        try { tts = TextToSpeech(this) { status ->
             if (status == TextToSpeech.SUCCESS) {
                 tts?.language = Locale("el", "GR"); ttsReady = true
                 tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
@@ -106,12 +107,31 @@ class MainActivity : Activity() {
                 })
                 js("window.__nativeTtsReady && __nativeTtsReady()")
             }
-        }
+        } } catch (e: Throwable) { CrashLog.note(this, "TextToSpeech", e) }
 
         pendingWake = intent?.getBooleanExtra("wake", false) == true
         web.loadUrl(URL + if (pendingWake) "?wake=1" else "")
         pendingWake = false
-        askPermissions()
+
+        val crash = CrashLog.take(this, "lastCrash") ?: CrashLog.take(this, "lastProblem")
+        if (crash != null) showReport(crash) else askPermissions()
+    }
+
+    /** Δείχνει την αιτία του προηγούμενου κλεισίματος, με κουμπί αντιγραφής. */
+    private fun showReport(text: String) {
+        dialogShown = true
+        val wakeOff = !wakeEnabled()
+        val msg = (if (wakeOff) "Η ακρόαση «Τζάρβις» απενεργοποιήθηκε προσωρινά για να ανοίγει κανονικά η εφαρμογή.\n\n" else "") +
+            "Πατήστε «Αντιγραφή» και στείλτε το κείμενο στον δημιουργό σας για διόρθωση.\n\n" + text.take(1500)
+        AlertDialog.Builder(this).setTitle("JARVIS: έκλεισε απρόσμενα").setMessage(msg)
+            .setPositiveButton("Αντιγραφή") { _, _ ->
+                val cm = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                cm.setPrimaryClip(android.content.ClipData.newPlainText("JARVIS", text))
+                android.widget.Toast.makeText(this, "Αντιγράφηκε", android.widget.Toast.LENGTH_SHORT).show()
+                dialogShown = false; askPermissions()
+            }
+            .setNegativeButton("Κλείσιμο") { _, _ -> dialogShown = false; askPermissions() }
+            .show()
     }
 
     override fun onNewIntent(intent: Intent) {
