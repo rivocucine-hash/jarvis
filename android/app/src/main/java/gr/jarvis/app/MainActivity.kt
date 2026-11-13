@@ -98,6 +98,14 @@ class MainActivity : Activity() {
                 if (u.host == HOST && (u.path ?: "").startsWith("/jarvis")) return false
                 openExternal(u); return true
             }
+            override fun onPageStarted(view: WebView, url: String?, favicon: android.graphics.Bitmap?) { note("page start") }
+            override fun onPageFinished(view: WebView, url: String?) { note("page finished") }
+            override fun onReceivedError(view: WebView, request: WebResourceRequest, error: android.webkit.WebResourceError) {
+                note("load error " + error.errorCode + " " + error.description + " " + request.url.toString().takeLast(60))
+            }
+            override fun onRenderProcessGone(view: WebView, detail: android.webkit.RenderProcessGoneDetail): Boolean {
+                note("RENDERER GONE crashed=" + detail.didCrash()); main.post { showDiag("Η μηχανή προβολής (WebView) τερματίστηκε.") }; return true
+            }
         }
         web.webChromeClient = object : WebChromeClient() {
             override fun onShowFileChooser(view: WebView, cb: ValueCallback<Array<Uri>>, params: FileChooserParams): Boolean {
@@ -105,6 +113,11 @@ class MainActivity : Activity() {
                 return try { startActivityForResult(params.createIntent(), REQ_FILE); true } catch (e: Exception) { fileCallback = null; false }
             }
             override fun onGeolocationPermissionsShowPrompt(origin: String, callback: GeolocationPermissions.Callback) { callback.invoke(origin, false, false) }
+            override fun onConsoleMessage(m: android.webkit.ConsoleMessage): Boolean {
+                if (m.messageLevel() == android.webkit.ConsoleMessage.MessageLevel.ERROR || m.messageLevel() == android.webkit.ConsoleMessage.MessageLevel.WARNING)
+                    note("js " + m.message() + " @" + m.sourceId().substringAfterLast('/') + ":" + m.lineNumber())
+                return true
+            }
         }
 
         try { tts = TextToSpeech(this) { status ->
@@ -115,16 +128,95 @@ class MainActivity : Activity() {
                     override fun onDone(id: String?) { js("window.__nativeTtsDone && __nativeTtsDone()") }
                     @Deprecated("Deprecated in Java") override fun onError(id: String?) { js("window.__nativeTtsDone && __nativeTtsDone()") }
                 })
-                js("window.__nativeTtsReady && __nativeTtsReady()")
-            }
+                note("tts ready")
+                // Η λίστα φωνών διαβάζεται στο παρασκήνιο: η σελίδα δεν περιμένει ποτέ τη μηχανή ομιλίας.
+                Thread {
+                    try {
+                        val list = tts?.voices?.filter { it.locale.language == "el" }?.sortedBy { it.isNetworkConnectionRequired } ?: emptyList()
+                        val arr = JSONArray()
+                        list.forEach { v -> arr.put(JSONObject().put("name", v.name).put("local", !v.isNetworkConnectionRequired)) }
+                        voiceMap = list.associateBy { it.name }; voicesJson = arr.toString(); note("voices " + list.size)
+                    } catch (e: Throwable) { note("voices failed " + e) }
+                    js("window.__nativeTtsReady && __nativeTtsReady()")
+                }.start()
+            } else note("tts init failed " + status)
         } } catch (e: Throwable) { CrashLog.note(this, "TextToSpeech", e) }
 
         pendingWake = intent?.getBooleanExtra("wake", false) == true
+        t0 = android.os.SystemClock.elapsedRealtime()
         web.loadUrl(URL + if (pendingWake) "?wake=1" else "")
         pendingWake = false
+        main.postDelayed(watchdog, 3000)
 
         val crash = CrashLog.take(this, "lastProblem")
         if (crash != null) showReport(crash) else askPermissions()
+    }
+
+    /* ---------------- Διάγνωση εκκίνησης ---------------- */
+    @Volatile private var voicesJson = "[]"
+    @Volatile private var voiceMap: Map<String, android.speech.tts.Voice> = emptyMap()
+    private val diag = java.util.concurrent.ConcurrentLinkedDeque<String>()
+    private var t0 = 0L
+    @Volatile private var lastReply = "-"
+    @Volatile private var lastPong = 0L
+    private var hudSeen = false
+    private var diagShown = false
+    private fun note(s: String) {
+        diag.add("[" + (android.os.SystemClock.elapsedRealtime() - t0) + "ms] " + s.take(300))
+        while (diag.size > 40) diag.pollFirst()
+    }
+    /** Ρωτάει τη σελίδα κάθε 2″ σε ποιο βήμα είναι. Αν σε 20″ δεν έχει ανοίξει η κύρια οθόνη, δείχνει αναφορά. */
+    private val watchdog = object : Runnable {
+        override fun run() {
+            if (hudSeen || diagShown || isFinishing || !::web.isInitialized) return
+            val now = android.os.SystemClock.elapsedRealtime()
+            try {
+                web.evaluateJavascript("(function(){try{var h=document.getElementById('hud');return (typeof bootStep==='undefined'?'?':bootStep)+'|'+(h&&!h.classList.contains('hidden')?1:0)+'|'+document.readyState+'|'+(typeof bootProblems==='undefined'?'':bootProblems.join(';'))}catch(e){return 'err '+e}})()") { r ->
+                    lastPong = android.os.SystemClock.elapsedRealtime(); lastReply = r ?: "null"
+                    if (r != null && r.contains("|1|")) { hudSeen = true; note("hud visible") }
+                }
+            } catch (e: Throwable) { note("ping failed " + e) }
+            if (now - t0 > 20000) { showDiag("Η κύρια οθόνη δεν άνοιξε μέσα σε 20 δευτερόλεπτα."); return }
+            main.postDelayed(this, 2000)
+        }
+    }
+    private fun diagText(reason: String): String {
+        val sb = StringBuilder()
+        val now = android.os.SystemClock.elapsedRealtime()
+        sb.append("JARVIS v").append(appVersion()).append(" · ").append(reason).append("\n")
+        sb.append("Android ").append(Build.VERSION.RELEASE).append(" · ").append(Build.MANUFACTURER).append(" ").append(Build.MODEL).append("\n")
+        try { val p = WebView.getCurrentWebViewPackage(); sb.append("WebView ").append(p?.packageName).append(" ").append(p?.versionName).append("\n") } catch (_: Throwable) {}
+        sb.append("Τελευταία απάντηση σελίδας: ").append(lastReply).append(" (πριν ").append(if (lastPong == 0L) "ποτέ" else ((now - lastPong) / 1000).toString() + "s").append(")\n")
+        sb.append("--- Καταγραφή ---\n")
+        diag.forEach { sb.append(it).append("\n") }
+        sb.append("--- Νήματα ---\n")
+        try {
+            Thread.getAllStackTraces().forEach { (t, st) ->
+                val mine = st.any { it.className.startsWith("gr.jarvis") }
+                if (t.name == "main" || t.name.startsWith("JavaBridge") || mine) {
+                    sb.append(t.name).append(" [").append(t.state).append("]\n")
+                    st.take(12).forEach { sb.append("  ").append(it.className.substringAfterLast('.')).append(".").append(it.methodName).append(":").append(it.lineNumber).append("\n") }
+                }
+            }
+        } catch (_: Throwable) {}
+        return sb.toString()
+    }
+    private fun showDiag(reason: String) {
+        if (diagShown || isFinishing) return
+        diagShown = true
+        val text = diagText(reason)
+        val copy = {
+            (getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(android.content.ClipData.newPlainText("JARVIS", text))
+            android.widget.Toast.makeText(this, "Η αναφορά αντιγράφηκε. Επικολλήστε τη στον δημιουργό σας.", android.widget.Toast.LENGTH_LONG).show()
+        }
+        try { copy() } catch (_: Throwable) {}
+        try {
+            AlertDialog.Builder(this).setTitle("JARVIS: δεν ξεκίνησε").setCancelable(false)
+                .setMessage("Η αναφορά αντιγράφηκε ήδη. Στείλτε τη στον δημιουργό σας (επικόλληση).\n\n" + text.take(1200))
+                .setPositiveButton("Αντιγραφή ξανά") { _, _ -> try { copy() } catch (_: Throwable) {}; diagShown = false }
+                .setNegativeButton("Επανεκκίνηση") { _, _ -> diagShown = false; hudSeen = false; t0 = android.os.SystemClock.elapsedRealtime(); note("reload"); web.reload(); main.postDelayed(watchdog, 3000) }
+                .show()
+        } catch (_: Throwable) { diagShown = false }
     }
 
     private var crashScreen = false
@@ -216,7 +308,8 @@ class MainActivity : Activity() {
     private var dialogShown = false
     /** Ζητάει μία-μία τις ειδικές άδειες που χρειάζονται για να ανοίγει με το «Τζάρβις». */
     private fun askNextSpecialPermission() {
-        if (dialogShown || !wakeEnabled()) return
+        // Οι ειδικές άδειες ζητούνται μόνο αφού η ακρόαση αποδειχθεί ότι δουλεύει σε αυτό το κινητό.
+        if (dialogShown || diagShown || !wakeEnabled() || !wakeProven()) return
         val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         when {
@@ -296,20 +389,17 @@ class MainActivity : Activity() {
 
         @JavascriptInterface fun speak(text: String, rate: Float, pitch: Float, voiceName: String) = main.post {
             val t = tts ?: return@post
-            if (voiceName.isNotEmpty()) t.voices?.firstOrNull { it.name == voiceName }?.let { t.voice = it }
+            if (voiceName.isNotEmpty()) voiceMap[voiceName]?.let { t.voice = it }
             else t.language = Locale("el", "GR")
             t.setSpeechRate(rate); t.setPitch(pitch)
             t.speak(text, TextToSpeech.QUEUE_FLUSH, null, "u" + System.currentTimeMillis())
         }
         @JavascriptInterface fun stopSpeak() { main.post { tts?.stop() } }
 
-        @JavascriptInterface fun voices(): String {
-            val arr = JSONArray()
-            try { tts?.voices?.filter { it.locale.language == "el" }?.sortedBy { it.isNetworkConnectionRequired }?.forEach { v ->
-                arr.put(JSONObject().put("name", v.name).put("local", !v.isNetworkConnectionRequired))
-            } } catch (_: Exception) {}
-            return arr.toString()
-        }
+        @JavascriptInterface fun voices(): String = voicesJson
+        @JavascriptInterface fun voicesCached(): String = voicesJson
+        /** Η σελίδα γράφει εδώ σημειώσεις για την αναφορά διάγνωσης. */
+        @JavascriptInterface fun diagNote(s: String) { note("web " + s) }
 
         @JavascriptInterface fun listen() { main.post { startListening() } }
         @JavascriptInterface fun stopListen() { main.post { sr?.stopListening() } }

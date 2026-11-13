@@ -10,7 +10,8 @@ if (A) {
   document.body.classList.add('native');
 
   /* ---------- Φωνές: η λίστα έρχεται από το κινητό ---------- */
-  const nativeVoices = () => { try { return JSON.parse(A.voices()).map((v) => ({ name: v.name, voiceURI: v.name, lang: 'el-GR', localService: v.local, default: false })); } catch { return []; } };
+  // Μόνο η έτοιμη λίστα (voicesCached): η παλιά κλήση voices() περίμενε τη μηχανή ομιλίας και μπορούσε να παγώσει τη σελίδα.
+  const nativeVoices = () => { try { return JSON.parse(A.voicesCached ? A.voicesCached() : '[]').map((v) => ({ name: v.name, voiceURI: v.name, lang: 'el-GR', localService: v.local, default: false })); } catch { return []; } };
   const shim = { speaking: false, pending: false, paused: false, onvoiceschanged: null, getVoices: nativeVoices, speak() {}, cancel() { A.stopSpeak(); }, pause() {}, resume() {}, addEventListener() {}, removeEventListener() {} };
   try { Object.defineProperty(window, 'speechSynthesis', { value: shim, configurable: true }); } catch { window.speechSynthesis = shim; }
   if (!window.SpeechSynthesisUtterance) window.SpeechSynthesisUtterance = function (t) { this.text = t; };
