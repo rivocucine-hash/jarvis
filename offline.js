@@ -93,6 +93,15 @@ intents.unshift(
       <div>4. Γυρίστε εδώ, πατήστε <b>⚙ → Κλειδί Gemini API</b> και κάντε επικόλληση. Θα το δοκιμάσω αμέσως.</div>
       <div style="margin-top:6px;opacity:.75">Είναι δωρεάν και δεν ζητάει κάρτα. Το κλειδί μένει μόνο στο κινητό σας.</div>`,
       speak: 'Σε τέσσερα βήματα. Ένα: πατήστε τον σύνδεσμο στην οθόνη. Δύο: συνδεθείτε με το Google σας. Τρία: πατήστε Create API key και μετά Copy. Τέσσερα: γυρίστε εδώ, ανοίξτε τις ρυθμίσεις και κάντε επικόλληση στο Κλειδί Gemini. Θα το δοκιμάσω αμέσως.' }; } },
+  { re: /(ρυθμισε το (chatgpt|τσατ ?τζι ?πι ?τι|gpt)|βαλε (το )?(chatgpt|τσατ ?τζι ?πι ?τι)|chatgpt|τσατ ?τζι ?πι ?τι|openrouter)/, run: () => {
+    setTimeout(() => { $('#settings').classList.remove('hidden'); fillSettings(); const el = document.querySelector('[data-k="gptKey"]'); if (el) el.scrollIntoView({ block: 'center' }); }, 8000);
+    return { text: 'Ρύθμιση ChatGPT', html: `<b>🤖 Δωρεάν εφεδρικός ChatGPT, σε 4 βήματα</b>
+      <div style="margin-top:6px">1. Πατήστε εδώ: <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">openrouter.ai/keys →</a></div>
+      <div>2. Πατήστε <b>Sign in</b> και συνδεθείτε με το Google σας.</div>
+      <div>3. Πατήστε <b>Create API Key</b>, δώστε όνομα JARVIS, και μετά <b>Copy</b>.</div>
+      <div>4. Γυρίστε εδώ, ⚙ → <b>Εφεδρικός ChatGPT</b>, και κάντε επικόλληση.</div>
+      <div style="margin-top:6px;opacity:.75">Δωρεάν, χωρίς κάρτα. Χρησιμοποιείται μόνο όταν τελειώνει το δωρεάν όριο του Gemini.</div>`,
+      speak: 'Σε τέσσερα βήματα. Ένα: πατήστε τον σύνδεσμο στην οθόνη. Δύο: συνδεθείτε με το Google σας. Τρία: πατήστε Create API Key και μετά Copy. Τέσσερα: γυρίστε εδώ, στις ρυθμίσεις, στο Εφεδρικός ChatGPT, και κάντε επικόλληση.' }; } },
   { re: /(τι δεν καταλαβεσ|τι δεν καταλαβαινεισ|αγνωστεσ εντολεσ|εντολεσ που δεν καταλαβεσ)/, run: () => { const u = Store.get('unknown', []); return u.length ? 'Οι τελευταίες φράσεις που δεν κατάλαβα: ' + u.slice(0, 8).map((x) => `«${x.t}»`).join(', ') + '. Θα τις βρείτε και στα Δεδομένα, καρτέλα «ΔΕΝ ΚΑΤΑΛΑΒΑ».' : 'Δεν υπάρχει κάτι που να μην κατάλαβα. Προς το παρόν!'; } },
 );
 TABS.push({ k: 'unknown', label: 'ΔΕΝ ΚΑΤΑΛΑΒΑ', get: () => Store.get('unknown', []), set: (v) => Store.set('unknown', v),

@@ -16,7 +16,7 @@ const Store = {
 const defaults = {
   userName: '', assistant: 'JARVIS', city: '', voiceURI: '', rate: 1.0, pitch: 0.85,
   sounds: true, hum: false, convo: false, geminiKey: '', model: 'gemini-flash-latest',
-  aiProvider: 'gemini', aiKey: '', aiModel: '',
+  aiProvider: 'gemini', aiKey: '', aiModel: '', gptKey: '',
   cities: 'Αθήνα, Αγρίνιο', weight: 0, wakeTime: '07:00', teams: 'Ολυμπιακός, Παναθηναϊκός', budget: 0, tmdbKey: '',
   wake: false, theme: 'reactor', waterRemind: true, autoBrief: true, lastBrief: '',
 };
@@ -444,17 +444,27 @@ async function askAI(text) {
       window.lastAiError = { at: Date.now(), status: r.status, message: String(j.error?.message || '').slice(0, 300), model: usedModel };
       try { Store.set('lastAiError', window.lastAiError); } catch {}
       if (r.status === 429 || r.status === 404) {
-        // Τελευταία λύση: η δωρεάν υπηρεσία χωρίς κλειδί, μόνο αν ο χρήστης την έχει ενεργοποιήσει.
-        if (S.freeAI) {
+        // Εφεδρικός εγκέφαλος: δωρεάν μοντέλο της OpenAI (ChatGPT) μέσω OpenRouter, μόνο αν ο χρήστης έχει βάλει δικό του κλειδί.
+        const gk = S.gptKey || (/^sk-or-/.test(S.aiKey || '') ? S.aiKey : '');
+        if (gk) {
           aiHistory.push({ role: 'user', parts: [{ text }] });
-          const o = await askFreeAI(sys);
-          if (o) { aiHistory.push({ role: 'model', parts: [{ text: o }] }); return o; }
+          const messages = [{ role: 'system', content: sys }, ...cleanHist(aiHistory).map((m) => ({ role: m.role === 'model' ? 'assistant' : 'user', content: m.parts.map((x) => x.text).join('') }))];
+          for (const gm of ['openai/gpt-oss-20b:free', 'openai/gpt-oss-120b:free']) {
+            try {
+              const rg = await fetch(AI_PROVIDERS.openrouter.url, { signal: AbortSignal.timeout ? AbortSignal.timeout(20000) : undefined, method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + gk, 'X-Title': 'JARVIS' }, body: JSON.stringify({ model: gm, messages, temperature: 0.7, max_tokens: 900 }) });
+              const jg = await rg.json().catch(() => ({}));
+              const o = (jg.choices?.[0]?.message?.content || '').trim();
+              if (rg.ok && o) { aiHistory.push({ role: 'model', parts: [{ text: o }] }); return o; }
+              window.lastAiError = { at: Date.now(), status: rg.status, message: String(jg.error?.message || '').slice(0, 300), model: gm };
+              if (rg.status === 401 || rg.status === 403) break;
+            } catch {}
+          }
           aiHistory.pop();
         }
         const left = models.filter((m) => !blocked[m]);
         if (!left.length && models.some((m) => blocked[m]?.daily)) {
           const t = new Date(Math.min(...models.map((m) => blocked[m].until)));
-          return `Το δωρεάν όριο της Google για σήμερα εξαντλήθηκε σε όλα τα μοντέλα. Ξαναγεμίζει στις ${t.getHours()}:${pad(t.getMinutes())}. Μέχρι τότε δουλεύουν κανονικά οι εντολές χωρίς εγκέφαλο: ώρα, καιρός, υπενθυμίσεις, σημειώσεις, μουσική.`;
+          return `Το δωρεάν όριο της Google για σήμερα εξαντλήθηκε σε όλα τα μοντέλα. Ξαναγεμίζει στις ${t.getHours()}:${pad(t.getMinutes())}. ${gk ? '' : 'Για να συνεχίζω με ChatGPT, πείτε «ρύθμισε το ChatGPT». '}Μέχρι τότε δουλεύουν κανονικά η ώρα, ο καιρός, οι υπενθυμίσεις, οι σημειώσεις και η μουσική.`;
         }
         return 'Ο δωρεάν εγκέφαλος έφτασε το όριο ερωτήσεων για αυτό το λεπτό. Δοκιμάστε ξανά σε ένα λεπτό.';
       }

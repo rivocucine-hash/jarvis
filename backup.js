@@ -10,7 +10,7 @@ const SKIP_KEYS = /^jv_(rss_|wday$|fired$)/; // προσωρινές μνήμε�
 function collectData() {
   const data = {};
   Object.keys(localStorage).filter((k) => k.startsWith('jv_') && !SKIP_KEYS.test(k)).forEach((k) => { try { data[k] = JSON.parse(localStorage.getItem(k)); } catch { data[k] = localStorage.getItem(k); } });
-  if (data.jv_settings) { delete data.jv_settings.geminiKey; delete data.jv_settings.aiKey; delete data.jv_settings.tmdbKey; delete data.jv_settings.psiKey; } // τα κλειδιά δεν μπαίνουν στο αρχείο
+  if (data.jv_settings) { delete data.jv_settings.geminiKey; delete data.jv_settings.aiKey; delete data.jv_settings.gptKey; delete data.jv_settings.tmdbKey; delete data.jv_settings.psiKey; } // τα κλειδιά δεν μπαίνουν στο αρχείο
   return { app: 'jarvis', version: 1, at: new Date().toISOString(), data };
 }
 const backupName = () => `jarvis-backup-${dkey()}.json`;
@@ -40,7 +40,7 @@ function importBackup(file) {
       if (!p || p.app !== 'jarvis' || !p.data) return res('Αυτό το αρχείο δεν είναι αντίγραφο ασφαλείας του JARVIS.');
       const when = new Date(p.at).toLocaleString('el-GR');
       if (!confirm(`Επαναφορά από το αντίγραφο της ${when};\n\nΠεριέχει: ${backupSummary(p.data) || 'ρυθμίσεις'}.\n\nΤα τωρινά δεδομένα θα αντικατασταθούν.`)) return res(null);
-      const keepKeys = { geminiKey: S.geminiKey, aiKey: S.aiKey, tmdbKey: S.tmdbKey, psiKey: S.psiKey };
+      const keepKeys = { geminiKey: S.geminiKey, aiKey: S.aiKey, gptKey: S.gptKey, tmdbKey: S.tmdbKey, psiKey: S.psiKey };
       Object.keys(localStorage).filter((k) => k.startsWith('jv_')).forEach((k) => localStorage.removeItem(k));
       Object.entries(p.data).forEach(([k, v]) => { if (k.startsWith('jv_')) localStorage.setItem(k, JSON.stringify(v)); });
       const st = JSON.parse(localStorage.getItem('jv_settings') || '{}'); Object.entries(keepKeys).forEach(([k, v]) => { if (v && !st[k]) st[k] = v; }); st.lastBackup = Date.now(); st.lastBrief = new Date().toDateString();
