@@ -65,6 +65,9 @@ if (A) {
   let bargeAt = 0, bargeFalse = 0;
   // Συνέχεια συζήτησης: πόσες φορές ακόμα ξανακούω αν δεν ακουστεί τίποτα, και πότε άρχισε η αναμονή (χωρίς «Τζάρβις»).
   let followUp = 0, followAt = 0;
+  // «Τζάρβις» ενώ παίζει ραδιόφωνο/μουσική: ακούω αμέσως· αν δεν πιάσω λέξη (π.χ. «Τζάρβις σταμάτα» μονορούφι), σταματάω τον ήχο.
+  let mediaWakeAt = 0;
+  const mediaOn = () => !!((window.Radio && Radio.on) || Music.n || (typeof Party !== 'undefined' && Party.on));
   // Κλειστή από προεπιλογή: κρατά το μικρόφωνο όσο μιλάω και σε κάποια κινητά καθυστερεί ή μπλοκάρει την επόμενη ακρόαση.
   if (!S.bargeResetV2) { S.bargeResetV2 = true; S.bargeResetV1 = true; S.bargeIn = true; S.bargeSens = 2; saveSettings(); }
   function bargeOn() { if (S.bargeIn !== true || !A.bargeStart) return; try { A.bargeStart(S.bargeSens || 2); } catch {} }
@@ -121,10 +124,12 @@ if (A) {
     // Αν το κινητό δεν έδωσε τελικό κείμενο, κρατάμε ό,τι είχε ακούσει ως εκείνη τη στιγμή.
     const t = (finalText || partialText).trim(); finalText = ''; partialText = '';
     if (t && Date.now() - bargeAt < 8000 && t.split(/\s+/).length === 1 && !/^(ναι|οχι|όχι|οκ|ok|τέλος|τελος|άλλο|αλλο)$/i.test(t)) { bargeFalse = 0; bargeAt = 0; try { closeAll(); } catch {} addMsg('ai', '■ Σταμάτησα.'); A.wakeDone(); }
-    else if (t) { missCount = 0; followUp = 0; if (Date.now() - bargeAt < 15000) bargeFalse = 0; lastVoiceCmd = Date.now(); tHeard = Date.now(); T.listen = tStart ? (tHeard - tStart) / 1000 : 0; if (!stopSessionIf(t)) handle(t); }
+    else if (t) { missCount = 0; followUp = 0; mediaWakeAt = 0; if (Date.now() - bargeAt < 15000) bargeFalse = 0; lastVoiceCmd = Date.now(); tHeard = Date.now(); T.listen = tStart ? (tHeard - tStart) / 1000 : 0; if (!stopSessionIf(t)) handle(t); }
     else {
       // Διακοπή χωρίς λόγια = λάθος συναγερμός (άκουσα τη δική μου φωνή). Μετά από 2, γίνομαι λιγότερο ευαίσθητος· στο ελάχιστο, την κλείνω.
       const barge = Date.now() - bargeAt < 15000;
+      if (mediaWakeAt && Date.now() - mediaWakeAt < 15000 && mediaOn()) { mediaWakeAt = 0; stopSessionIf('σταματα'); return; }
+      mediaWakeAt = 0;
       // Σιωπή στη συνέχεια της συζήτησης: ξανακούω (έως 3 φορές, περίπου 20″) πριν γυρίσω στην αναμονή για «Τζάρβις».
       if (!barge && followUp > 0 && !Session.active) { followUp--; setTimeout(() => { if (!Voice.listening && !Voice.speakingNow) A.listen(); else A.wakeDone(); }, 250); return; }
       if (barge && ++bargeFalse >= 2) { bargeFalse = 0; if ((S.bargeSens || 2) > 1) { S.bargeSens = (S.bargeSens || 2) - 1; saveSettings(); } else { S.bargeIn = false; saveSettings(); toast('ΔΙΑΚΟΠΗ', 'Η διακοπή με τη φωνή έκλεισε, γιατί σε αυτό το κινητό άκουγα τη δική μου φωνή. Πείτε «να διακόπτεσαι» για να την ξανανοίξετε.', 9000); } }
@@ -154,6 +159,7 @@ if (A) {
     if (!booted()) { await boot(); await sleep(600); }
     if (typeof Standby !== 'undefined' && Standby.on) Standby.hide();
     // Μέσα σε πρόγραμμα (γιόγκα, διαλογισμός, γυμναστική): «Τζάρβις» κόβει τη φωνή και ακούει, π.χ. «σταμάτα». Το πρόγραμμα συνεχίζει αν δεν ειπωθεί κάτι.
+    if (!Session.active && mediaOn()) { speechSynthesis.cancel(); Sound.listen(); lastVoiceCmd = Date.now(); followUp = 0; followAt = Date.now(); mediaWakeAt = Date.now(); try { if (window.Radio && Radio.audio) Radio.audio.volume = 0.1; } catch {} setTimeout(() => A.listen(), 60); return; }
     if (Session.active) { speechSynthesis.cancel(); Sound.listen(); toast('ΠΡΟΓΡΑΜΜΑ', 'Σας ακούω. Πείτε «σταμάτα» για τέλος.', 4000); lastVoiceCmd = Date.now(); followUp = 0; followAt = Date.now(); setTimeout(() => A.listen(), 150); return; }
     const line = callReply(); Sound.listen(); addMsg('ai', line);
     await Voice.speak(line);
@@ -167,7 +173,7 @@ if (A) {
   const stopSessionIf = (t) => {
     const r = running(); if (!r.length || !SESSION_STOP.test(norm(t))) return false;
     if (Session.active) Session.stop(); try { if (Pomo.t) Pomo.stop(true); } catch {} try { Music.stop(2); } catch {} try { if (Party.on) Party.stop(); } catch {} try { if (window.Radio) Radio.stop(); } catch {}
-    addMsg('user', t); say(`Σταμάτησα ${r.join(' και ')}.`, { noRelisten: true }); return true;
+    if (t !== 'σταματα') addMsg('user', t); say(`Σταμάτησα ${r.join(' και ')}.`, { noRelisten: true }); return true;
   };
 
   /* ---------- Η συνεχής ακρόαση γίνεται από την υπηρεσία του κινητού ---------- */
