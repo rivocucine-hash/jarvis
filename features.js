@@ -693,9 +693,10 @@ async function morningBriefing(opts = {}) {
   const cel = celebratingContacts(d); if (cel.length) add('📞', `Από τους δικούς σας γιορτάζει: ${cel.join(', ')}. Μην ξεχάσετε να ευχηθείτε!`);
   const bd = birthdaysOn(d); if (bd.length) add('🎂', `Σήμερα έχει γενέθλια: ${bd.map((b) => b.name).join(', ')}!`);
   const bdT = birthdaysOn(addDays(d, 1)); if (bdT.length) add('🎁', `Αύριο έχει γενέθλια: ${bdT.map((b) => b.name).join(', ')}. Ίσως χρειάζεται δώρο.`);
+  try { const ev = window.eventsOn ? eventsOn(d) : []; if (ev.length) add('📅', `Ραντεβού σήμερα: ${ev.map((e) => (e.time ? e.time + ' ' : '') + e.text).join(', ')}.`); } catch {}
   const ag = agendaOn(d); if (ag.length) add('🗓', `Το πρόγραμμά σας σήμερα: ${ag.map((a) => `${a.time} ${a.text}`).join(', ')}.`);
   const open = todos.filter((t) => !t.done); if (open.length) add('☰', `Εκκρεμότητες: ${open.slice(0, 5).map((t) => t.text).join(', ')}${open.length > 5 ? ` και άλλες ${open.length - 5}` : ''}.`);
-  const rem = reminders.filter((r) => sameDay(new Date(r.due), d)); if (rem.length) add('🔔', `Υπενθυμίσεις σήμερα: ${rem.map((r) => `${r.kind === 'alarm' ? 'ξυπνητήρι' : r.kind === 'timer' ? 'χρονόμετρο' : r.text} στις ${hm(new Date(r.due))}`).join(', ')}.`);
+  const rem = reminders.filter((r) => !r.ev && sameDay(new Date(r.due), d)); if (rem.length) add('🔔', `Υπενθυμίσεις σήμερα: ${rem.map((r) => `${r.kind === 'alarm' ? 'ξυπνητήρι' : r.kind === 'timer' ? 'χρονόμετρο' : r.text} στις ${hm(new Date(r.due))}`).join(', ')}.`);
   if (window.briefingExtras) { try { await briefingExtras(add, d); } catch {} }
   add('💧', `Στόχος νερού σήμερα: ${(waterGoal() / 1000).toFixed(1)} λίτρα, περίπου ${Math.round(waterGoal() / 250)} ποτήρια.`);
   add('✨', dailyQuote());
