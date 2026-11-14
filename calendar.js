@@ -128,7 +128,7 @@ intents.unshift(
     return `Διαγράφηκε: ${e.text}, ${dayName(dOf(e.date))}.`;
   } },
   // Μετακίνηση: «μετάφερε τον οδοντίατρο στις 11», «άλλαξε τον οδοντίατρο για την Παρασκευή»
-  { aiSafe: true, re: /(μεταφερε|μετεφερε|αλλαξε|πηγαινε|μετακινησε|καθυστερησε)/, test: (n) => findEvents(n).length > 0, run: (raw, n) => {
+  { aiConfirm: true, re: /(μεταφερε|μετεφερε|αλλαξε|πηγαινε|μετακινησε|καθυστερησε)/, test: (n) => findEvents(n).length > 0, run: (raw, n) => {
     const f = findEvents(n.replace(/(μεταφερε|αλλαξε|μετακινησε|πηγαινε)/g, ' ')); if (f.length > 1) return `Βρήκα ${f.length} ραντεβού με αυτό το όνομα. Πείτε μου ποιο, με την ημερομηνία του.`;
     const e = f[0]; const p = parseEvent(raw);
     if (!p.date && !p.time) return `Πότε να μεταφέρω το «${e.text}»; Πείτε π.χ. «μετάφερε τον ${e.text.toLowerCase()} στις 11» ή «για την Παρασκευή».`;
