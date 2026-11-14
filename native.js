@@ -63,6 +63,8 @@ if (A) {
 
   /* ---------- Διακοπή με τη φωνή: αν μιλήσετε όσο μιλάω, σταματώ και σας ακούω ---------- */
   let bargeAt = 0, bargeFalse = 0;
+  // Συνέχεια συζήτησης: πόσες φορές ακόμα ξανακούω αν δεν ακουστεί τίποτα, και πότε άρχισε η αναμονή (χωρίς «Τζάρβις»).
+  let followUp = 0, followAt = 0;
   // Κλειστή από προεπιλογή: κρατά το μικρόφωνο όσο μιλάω και σε κάποια κινητά καθυστερεί ή μπλοκάρει την επόμενη ακρόαση.
   if (!S.bargeResetV2) { S.bargeResetV2 = true; S.bargeResetV1 = true; S.bargeIn = true; S.bargeSens = 2; saveSettings(); }
   function bargeOn() { if (S.bargeIn !== true || !A.bargeStart) return; try { A.bargeStart(S.bargeSens || 2); } catch {} }
@@ -109,7 +111,7 @@ if (A) {
       return;
     }
     // 6/7: δεν ακούστηκε ή δεν αναγνωρίστηκε ομιλία. Αν δεν υπάρχει ούτε μισή φράση, το λέμε (όχι συνέχεια).
-    if ((code === 6 || code === 7) && !partialText && ++missCount <= 2) { toast('ΑΚΡΟΑΣΗ', 'Δεν σας άκουσα καθαρά. Πατήστε τον αντιδραστήρα και μιλήστε μόλις ακουστεί ο ήχος.', 4000); }
+    if ((code === 6 || code === 7) && !partialText && Date.now() - followAt > 60000 && ++missCount <= 2) { toast('ΑΚΡΟΑΣΗ', 'Δεν σας άκουσα καθαρά. Πατήστε τον αντιδραστήρα και μιλήστε μόλις ακουστεί ο ήχος.', 4000); }
     if (code === 9) addMsg('ai', 'Χρειάζομαι άδεια για το μικρόφωνο. Πατήστε «Να επιτρέπεται» όταν σας ρωτήσει το κινητό.');
     else if (code === 2 || code === 1) addMsg('ai', 'Χωρίς ίντερνετ η αναγνώριση φωνής δεν είναι διαθέσιμη. Γράψτε την εντολή.');
     else if (code === -1) addMsg('ai', 'Δεν βρέθηκε υπηρεσία αναγνώρισης φωνής. Εγκαταστήστε ή ενημερώστε την εφαρμογή Google.');
@@ -119,10 +121,13 @@ if (A) {
     // Αν το κινητό δεν έδωσε τελικό κείμενο, κρατάμε ό,τι είχε ακούσει ως εκείνη τη στιγμή.
     const t = (finalText || partialText).trim(); finalText = ''; partialText = '';
     if (t && Date.now() - bargeAt < 8000 && t.split(/\s+/).length === 1 && !/^(ναι|οχι|όχι|οκ|ok|τέλος|τελος|άλλο|αλλο)$/i.test(t)) { bargeFalse = 0; bargeAt = 0; try { closeAll(); } catch {} addMsg('ai', '■ Σταμάτησα.'); A.wakeDone(); }
-    else if (t) { missCount = 0; if (Date.now() - bargeAt < 15000) bargeFalse = 0; lastVoiceCmd = Date.now(); tHeard = Date.now(); T.listen = tStart ? (tHeard - tStart) / 1000 : 0; handle(t); }
+    else if (t) { missCount = 0; followUp = 0; if (Date.now() - bargeAt < 15000) bargeFalse = 0; lastVoiceCmd = Date.now(); tHeard = Date.now(); T.listen = tStart ? (tHeard - tStart) / 1000 : 0; handle(t); }
     else {
       // Διακοπή χωρίς λόγια = λάθος συναγερμός (άκουσα τη δική μου φωνή). Μετά από 2, γίνομαι λιγότερο ευαίσθητος· στο ελάχιστο, την κλείνω.
-      if (Date.now() - bargeAt < 15000 && ++bargeFalse >= 2) { bargeFalse = 0; if ((S.bargeSens || 2) > 1) { S.bargeSens = (S.bargeSens || 2) - 1; saveSettings(); } else { S.bargeIn = false; saveSettings(); toast('ΔΙΑΚΟΠΗ', 'Η διακοπή με τη φωνή έκλεισε, γιατί σε αυτό το κινητό άκουγα τη δική μου φωνή. Πείτε «να διακόπτεσαι» για να την ξανανοίξετε.', 9000); } }
+      const barge = Date.now() - bargeAt < 15000;
+      // Σιωπή στη συνέχεια της συζήτησης: ξανακούω (έως 3 φορές, περίπου 20″) πριν γυρίσω στην αναμονή για «Τζάρβις».
+      if (!barge && followUp > 0 && !Session.active) { followUp--; setTimeout(() => { if (!Voice.listening && !Voice.speakingNow) A.listen(); else A.wakeDone(); }, 250); return; }
+      if (barge && ++bargeFalse >= 2) { bargeFalse = 0; if ((S.bargeSens || 2) > 1) { S.bargeSens = (S.bargeSens || 2) - 1; saveSettings(); } else { S.bargeIn = false; saveSettings(); toast('ΔΙΑΚΟΠΗ', 'Η διακοπή με τη φωνή έκλεισε, γιατί σε αυτό το κινητό άκουγα τη δική μου φωνή. Πείτε «να διακόπτεσαι» για να την ξανανοίξετε.', 9000); } }
       A.wakeDone();
     }
   };
@@ -134,11 +139,11 @@ if (A) {
     if (typeof Standby !== 'undefined' && Standby.on) Standby.hide(); lastVoiceCmd = Date.now(); setTimeout(() => A.listen(), 150);
   };
 
-  /* ---------- Συνέχεια συζήτησης: μετά από φωνητική εντολή, ακούει ξανά μία φορά ---------- */
+  /* ---------- Συνέχεια συζήτησης: μετά από φωνητική εντολή, ακούει ξανά (έως ~20″ σιωπής) χωρίς «Τζάρβις» ---------- */
   const baseSayN = say;
   say = async function (text, opts = {}) {
     const r = await baseSayN(text, opts);
-    if (!opts.noRelisten && Date.now() - lastVoiceCmd < 30000 && !Voice.listening && !Session.active) setTimeout(() => { if (!Voice.listening && !Voice.speakingNow) A.listen(); }, 350);
+    if (!opts.noRelisten && Date.now() - lastVoiceCmd < 180000 && !Voice.listening && !Session.active) { followUp = 3; followAt = Date.now(); setTimeout(() => { if (!Voice.listening && !Voice.speakingNow) A.listen(); }, 350); }
     else if (!Voice.listening) A.wakeDone();
     return r;
   };
@@ -151,7 +156,7 @@ if (A) {
     if (Session.active) return A.wakeDone();
     const line = callReply(); Sound.listen(); addMsg('ai', line);
     await Voice.speak(line);
-    lastVoiceCmd = Date.now(); A.listen();
+    lastVoiceCmd = Date.now(); followUp = 2; followAt = Date.now(); A.listen();
   }
   window.__nativeWake = () => { onWake(); };
 
