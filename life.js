@@ -589,11 +589,40 @@ const L = [
   { re: /(ποιοσ γεννηθηκε σημερα|ποιοι γεννηθηκαν σημερα|διασημοι γενεθλια σημερα)/, run: async () => { const w = await wikiDay(); if (!w || !w.births.length) return 'Δεν βρήκα πληροφορίες.'; const b = [...w.births].filter((l) => +l.match(/^\d+/)[0] >= 1850).sort(() => Math.random() - 0.5).slice(0, 3); return 'Σαν σήμερα γεννήθηκαν: ' + b.map((l) => l.replace(/^(\d+)\s*[-–]\s*/, 'το $1, ')).join('. ') + '.'; } },
 
   // Instagram
-  { re: /(ανοιξε|δειξε).*(μηνυματα|inbox|dm|ντιεμ).*(instagram|ινσταγκραμ|ινστα)|(ανοιξε|δειξε).*(instagram|ινσταγκραμ|ινστα).*(μηνυματα|inbox|dm)/, run: () => { setTimeout(() => openUrl(IG_INBOX), 900); return 'Ανοίγω κατευθείαν τα μηνύματα του Instagram. Μην κοιτάξετε τα stories!'; } },
+  { re: /(ανοιξε|δειξε|παμε).*(μ[ηυι]ν[ηυι]ματα|inbox|dm|ντιεμ|εισερχομενα).*(instagram|ινστ)|(ανοιξε|δειξε|παμε).*(instagram|ινστ).*(μ[ηυι]ν[ηυι]ματα|inbox|dm|εισερχομενα)/, run: () => { setTimeout(() => openUrl(IG_INBOX), 900); return 'Ανοίγω κατευθείαν τα μηνύματα του Instagram. Μην κοιτάξετε τα stories!'; } },
   { re: /(instagram|ινσταγκραμ|ινστα|social)/, test: (n) => /(μηνυμα|μηνυματα|dm|ντιεμ|γραφουν|εγραψαν|stories|στοριζ|στορυ|αποφυγ)/.test(n), run: () => instagramHelp() },
 ];
 intents.unshift(...L);
-SITES.instagram = SITES['ινσταγκραμ'] = IG_INBOX; // πάντα κατευθείαν στα μηνύματα, ποτέ στο feed
+SITES.instagram = SITES['ινσταγκραμ'] = SITES['ινσταγραμ'] = IG_INBOX; // πάντα κατευθείαν στα μηνύματα, ποτέ στο feed
+/* Η εφαρμογή Instagram αγνοεί συχνά τον σύνδεσμο ιστού για τα μηνύματα και ανοίγει το feed.
+   Πρώτα δοκιμάζουμε τον δικό της σύνδεσμο (instagram://direct-inbox)· αν η εφαρμογή δεν ανοίξει σε 1,8″, ο σύνδεσμος ιστού. */
+const baseOpenUrlIG = openUrl;
+function openIgInbox() {
+  let left = false; const onHide = () => { if (document.hidden) left = true; };
+  document.addEventListener('visibilitychange', onHide);
+  try { baseOpenUrlIG('instagram://direct-inbox'); } catch {}
+  setTimeout(() => { document.removeEventListener('visibilitychange', onHide); if (!left && !document.hidden) baseOpenUrlIG(IG_INBOX); }, 1800);
+}
+openUrl = function (u) { return u === IG_INBOX ? openIgInbox() : baseOpenUrlIG(u); };
+/* «Instagram», «WhatsApp», «Viber», «Messenger» (σκέτο ή «άνοιξε τα μηνύματα του …»): ανοίγει την εφαρμογή στις συζητήσεις. */
+const MSG_APPS = [
+  ['instagram', /(instagram|ινστ)/, 'Instagram', null, null],
+  ['whatsapp', /(whatsapp|γουατσαπ|γουοτσαπ|βατσαπ|ουατσαπ|γουατσ απ)/, 'το WhatsApp', 'whatsapp://send', 'https://web.whatsapp.com'],
+  ['viber', /(viber|βαιμπερ|βαιμπερ|βαιβερ)/, 'το Viber', 'viber://chats', null],
+  ['messenger', /(messenger|μεσεντζερ|μεσετζερ|μεσσεντζερ|μεσεντζερ)/, 'το Messenger', 'fb-messenger://threads', 'https://www.messenger.com'],
+  ['sms', /(sms|εσεμεσ|εσ εμ εσ|γραπτα|κινητου)/, 'τα SMS', 'sms:', null],
+];
+function openMsgApp(key) {
+  const [k, , name, scheme, web] = MSG_APPS.find((x) => x[0] === key);
+  const A2 = window.AndroidJarvis;
+  if (k === 'instagram') { setTimeout(openIgInbox, 700); return `Ανοίγω τα μηνύματα του Instagram.`; }
+  if (A2 && A2.openApp) { const r = A2.openApp(k); if (r === 'missing') return `Δεν βρίσκω ${name} σε αυτό το κινητό.`; if (r === 'ok') return `Ανοίγω ${name}.`; }
+  // Παλιότερη εφαρμογή ή browser: ο δικός της σύνδεσμος, και αν δεν ανοίξει, η σελίδα ιστού.
+  setTimeout(() => { let left = false; const h = () => { if (document.hidden) left = true; }; document.addEventListener('visibilitychange', h); try { baseOpenUrlIG(scheme); } catch {}
+    setTimeout(() => { document.removeEventListener('visibilitychange', h); if (!left && !document.hidden && web) baseOpenUrlIG(web); }, 1800); }, 700);
+  return `Ανοίγω ${name}.`;
+}
+intents.unshift({ re: /^((ανοιξε|ανοιξτε|δειξε|δειξε μου|παμε|βαλε) )?((μου |τα |το |στο |στα )*)?((μ[ηυι]ν[ηυι]ματα|συνομιλιεσ|συζητησεισ|chat|τσατ|εισερχομενα) (του |στο |απο το )?)?(το |τα )?(instagram|ινστ\S*|sms|εσεμεσ|εσ εμ εσ|γραπτα μ[ηυι]ν[ηυι]ματα|μ[ηυι]ν[ηυι]ματα του κινητου|whatsapp|γουατσαπ|γουοτσαπ|βατσαπ|ουατσαπ|viber|βαιμπερ|βαιβερ|messenger|μεσεντζερ|μεσετζερ|μεσσεντζερ)( μου)?$/, run: (raw, n) => { const a = MSG_APPS.find((x) => x[1].test(n)); return a ? openMsgApp(a[0]) : null; } });
 const toMin = (t) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
 const nowMin = () => new Date().getHours() * 60 + new Date().getMinutes();
 

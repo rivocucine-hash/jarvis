@@ -617,6 +617,25 @@ class MainActivity : Activity() {
             } catch (e: Exception) { "" }
         }
 
+        /** Ανοίγει μία από τις γνωστές εφαρμογές μηνυμάτων στην αρχική της οθόνη (τις συζητήσεις). Μόνο από σταθερή λίστα. */
+        @JavascriptInterface fun openApp(which: String): String {
+            if (which == "sms") {
+                // Η προεπιλεγμένη εφαρμογή μηνυμάτων του κινητού, στη λίστα συζητήσεων.
+                return try { val i = Intent.makeMainSelectorActivity(Intent.ACTION_MAIN, Intent.CATEGORY_APP_MESSAGING); main.post { try { startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (_: Exception) {} }; "ok" } catch (_: Exception) { "error" }
+            }
+            val pkgs = when (which) {
+                "whatsapp" -> listOf("com.whatsapp", "com.whatsapp.w4b")
+                "viber" -> listOf("com.viber.voip")
+                "messenger" -> listOf("com.facebook.orca")
+                "instagram" -> listOf("com.instagram.android")
+                else -> return "unknown"
+            }
+            for (p in pkgs) {
+                val i = packageManager.getLaunchIntentForPackage(p) ?: continue
+                return try { main.post { startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }; "ok" } catch (_: Exception) { "error" }
+            }
+            return "missing"
+        }
         @JavascriptInterface fun openAppSettings() {
             main.post {
                 listOf("askedOverlay", "askedBattery", "askedFullScreen").forEach { prefs.edit().remove(it).apply() }
