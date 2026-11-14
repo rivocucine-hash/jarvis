@@ -162,7 +162,13 @@ if (A) {
   window.__nativeWake = () => { onWake(); };
   // Μέσα σε πρόγραμμα, κάθε φράση σταματήματος το κλείνει («τέλος γιόγκα», «φτάνει», «κλείσ' το»...), πριν από κάθε άλλη εντολή.
   const SESSION_STOP = /(σταματ|τελοσ|τερματισ|φτανει|αρκετα|κλεισ|stop|ακυρ|σωπα|σιωπη|ησυχια)/;
-  const stopSessionIf = (t) => { if (!Session.active || !SESSION_STOP.test(norm(t))) return false; Session.stop(); try { Music.stop(2); } catch {} addMsg('user', t); say('Σταμάτησα το πρόγραμμα.', { noRelisten: true }); return true; };
+  // Ό,τι τρέχει: πρόγραμμα (γιόγκα, αναπνοές, διαλογισμός, γυμναστική, κρύο ντους, ρουτίνα), Pomodoro, μουσική/ήχοι ύπνου, πάρτι.
+  const running = () => { const r = []; if (Session.active) r.push('το πρόγραμμα'); if (typeof Pomo !== 'undefined' && Pomo.t) r.push('το Pomodoro'); if (Music.n) r.push('τη μουσική'); if (typeof Party !== 'undefined' && Party.on) r.push('το πάρτι'); return r; };
+  const stopSessionIf = (t) => {
+    const r = running(); if (!r.length || !SESSION_STOP.test(norm(t))) return false;
+    if (Session.active) Session.stop(); try { if (Pomo.t) Pomo.stop(true); } catch {} try { Music.stop(2); } catch {} try { if (Party.on) Party.stop(); } catch {}
+    addMsg('user', t); say(`Σταμάτησα ${r.join(' και ')}.`, { noRelisten: true }); return true;
+  };
 
   /* ---------- Η συνεχής ακρόαση γίνεται από την υπηρεσία του κινητού ---------- */
   // Η ακρόαση τρέχει σε ξεχωριστή διεργασία. Ξεκινάει αυτόματα μόνο αφού αποδειχθεί σταθερή σε αυτό το κινητό.
