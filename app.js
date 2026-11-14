@@ -711,7 +711,7 @@ async function handle(raw) {
   if (ai) {
     // Αυτόματη μνήμη: ο εγκέφαλος σημειώνει μόνιμα στοιχεία με «ΘΥΜΗΣΟΥ: …» (κρατιούνται σιωπηλά, έως 120 χαρακτήρες το καθένα).
     const learned = []; ai = ai.replace(/^\s*«?ΘΥΜΗΣΟΥ:\s*(.+?)»?\s*$/gim, (_, f) => { learned.push(f.trim().slice(0, 120)); return ''; }).trim();
-    if (learned.length && window.addFact) learned.slice(0, 2).forEach((f) => { try { if (!/(ΕΝΤΟΛΗ|http|<|>)/i.test(f) && !/ήδη/.test(addFact(f) || 'ήδη')) toast('🧠 ΜΝΗΜΗ', `Θα θυμάμαι: ${f}`, 5000); } catch {} });
+    if (learned.length && window.addFact) learned.slice(0, 2).forEach((f) => { try { if (!/(ΕΝΤΟΛΗ|ΘΥΜΗΣΟΥ|http|<|>|\{|\})/i.test(f) && !/(αγνοησ|οδηγι|εντολ|πρεπει να|να απαντασ|να λεσ|system|prompt|κωδικ|password)/.test(norm(f)) && !/ήδη/.test(addFact(f) || 'ήδη')) toast('🧠 ΜΝΗΜΗ', `Θα θυμάμαι: ${f}`, 5000); } catch {} });
     if (!ai && learned.length) return respond('Το κράτησα στη μνήμη μου.');
     // Ο εγκέφαλος μπορεί να διαλέξει ΜΟΝΟ εντολή από τη σταθερή, ακίνδυνη λίστα (aiAllowed), και μόνο αν όλη η απάντηση είναι αυτή η γραμμή.
     const cm = ai.trim().match(/^«?ΕΝΤΟΛΗ:\s*«?([^»\n]+?)[.»"\s]*$/i);
@@ -720,7 +720,7 @@ async function handle(raw) {
       if (allowed) { const o = await runIntents(allowed, norm(allowed)); if (o != null) return respond(o); }
       // Ελεύθερη φράση που ο εγκέφαλος ξανάγραψε ως ακίνδυνη εντολή (π.χ. ημερολόγιο, υπενθύμιση, ραδιόφωνο).
       const safe = window.aiSafeCommand ? aiSafeCommand(cm[1]) : null;
-      if (safe) { const o = await runIntents(safe, norm(safe)); if (o != null) return done(safe, o); }
+      if (safe && window.runAiSafe) { const o = await runAiSafe(safe); if (o != null) return done(safe, o); }
     }
     const clean = ai.replace(/«?ΕΝΤΟΛΗ:[^\n]*/gi, '').trim();
     if (clean) return respond(clean);
