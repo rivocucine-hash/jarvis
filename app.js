@@ -363,6 +363,24 @@ async function askFreeAI(sys) {
     return (j.choices?.[0]?.message?.content || '').trim() || null;
   } catch { return null; } finally { clearTimeout(t); }
 }
+/* Εφεδρικός ChatGPT: δωρεάν μοντέλα της OpenAI μέσω OpenRouter, με το κλειδί του χρήστη. Επιστρέφει { text } ή { status, error }. */
+function gptKey() { return S.gptKey || (/^sk-or-/.test(S.aiKey || '') ? S.aiKey : ''); }
+async function askGPT(messages) {
+  const gk = gptKey(); if (!gk) return { status: 0, error: 'χωρίς κλειδί' };
+  let res = { status: 0, error: 'δεν απάντησε εγκαίρως' };
+  for (const gm of ['openai/gpt-oss-20b:free', 'openai/gpt-oss-120b:free']) {
+    try {
+      const rg = await fetch(AI_PROVIDERS.openrouter.url, { signal: AbortSignal.timeout ? AbortSignal.timeout(20000) : undefined, method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + gk, 'X-Title': 'JARVIS' }, body: JSON.stringify({ model: gm, messages, temperature: 0.7, max_tokens: 900 }) });
+      const jg = await rg.json().catch(() => ({}));
+      const o = (jg.choices?.[0]?.message?.content || '').trim();
+      if (rg.ok && o) return { text: o };
+      res = { status: rg.status, error: String(jg.error?.message || '').slice(0, 300) };
+      window.lastAiError = { at: Date.now(), status: rg.status, message: res.error, model: gm };
+      if (rg.status === 401 || rg.status === 403) break;
+    } catch {}
+  }
+  return res;
+}
 async function askAI(text) {
   if (!hasAI()) {
     if (!S.freeAI) return null;
@@ -445,20 +463,11 @@ async function askAI(text) {
       try { Store.set('lastAiError', window.lastAiError); } catch {}
       if (r.status === 429 || r.status === 404) {
         // Εφεδρικός εγκέφαλος: δωρεάν μοντέλο της OpenAI (ChatGPT) μέσω OpenRouter, μόνο αν ο χρήστης έχει βάλει δικό του κλειδί.
-        const gk = S.gptKey || (/^sk-or-/.test(S.aiKey || '') ? S.aiKey : '');
+        const gk = gptKey();
         if (gk) {
           aiHistory.push({ role: 'user', parts: [{ text }] });
-          const messages = [{ role: 'system', content: sys }, ...cleanHist(aiHistory).map((m) => ({ role: m.role === 'model' ? 'assistant' : 'user', content: m.parts.map((x) => x.text).join('') }))];
-          for (const gm of ['openai/gpt-oss-20b:free', 'openai/gpt-oss-120b:free']) {
-            try {
-              const rg = await fetch(AI_PROVIDERS.openrouter.url, { signal: AbortSignal.timeout ? AbortSignal.timeout(20000) : undefined, method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + gk, 'X-Title': 'JARVIS' }, body: JSON.stringify({ model: gm, messages, temperature: 0.7, max_tokens: 900 }) });
-              const jg = await rg.json().catch(() => ({}));
-              const o = (jg.choices?.[0]?.message?.content || '').trim();
-              if (rg.ok && o) { aiHistory.push({ role: 'model', parts: [{ text: o }] }); return o; }
-              window.lastAiError = { at: Date.now(), status: rg.status, message: String(jg.error?.message || '').slice(0, 300), model: gm };
-              if (rg.status === 401 || rg.status === 403) break;
-            } catch {}
-          }
+          const g = await askGPT([{ role: 'system', content: sys }, ...cleanHist(aiHistory).map((m) => ({ role: m.role === 'model' ? 'assistant' : 'user', content: m.parts.map((x) => x.text).join('') }))]);
+          if (g.text) { aiHistory.push({ role: 'model', parts: [{ text: g.text }] }); return g.text; }
           aiHistory.pop();
         }
         const left = models.filter((m) => !blocked[m]);

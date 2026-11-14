@@ -93,6 +93,14 @@ intents.unshift(
       <div>4. Γυρίστε εδώ, πατήστε <b>⚙ → Κλειδί Gemini API</b> και κάντε επικόλληση. Θα το δοκιμάσω αμέσως.</div>
       <div style="margin-top:6px;opacity:.75">Είναι δωρεάν και δεν ζητάει κάρτα. Το κλειδί μένει μόνο στο κινητό σας.</div>`,
       speak: 'Σε τέσσερα βήματα. Ένα: πατήστε τον σύνδεσμο στην οθόνη. Δύο: συνδεθείτε με το Google σας. Τρία: πατήστε Create API key και μετά Copy. Τέσσερα: γυρίστε εδώ, ανοίξτε τις ρυθμίσεις και κάντε επικόλληση στο Κλειδί Gemini. Θα το δοκιμάσω αμέσως.' }; } },
+  { re: /(δοκιμασε|δοκιμη|ελεγξε|τεσταρε) (το |τον )?(chatgpt|τσατ ?τζι ?πι ?τι|gpt|εφεδρικο)/, run: async () => {
+    if (!gptKey()) return 'Δεν βρίσκω κλειδί ChatGPT. Ανοίξτε τις ρυθμίσεις και κάντε επικόλληση στο «Εφεδρικός ChatGPT».';
+    Core.set('thinking');
+    const g = await askGPT([{ role: 'system', content: 'Απάντησε στα ελληνικά, σε μία σύντομη πρόταση, χωρίς emoji.' }, { role: 'user', content: 'Πες ένα σύντομο γεια και ότι είσαι έτοιμος να βοηθήσεις.' }]);
+    if (g.text) return 'Το ChatGPT δουλεύει. Είπε: ' + g.text;
+    if (g.status === 401 || g.status === 403) return 'Το OpenRouter δεν δέχεται το κλειδί. Αντιγράψτε το ξανά ολόκληρο, ξεκινά με sk-or.';
+    if (g.status === 429) return 'Το κλειδί είναι σωστό, αλλά το δωρεάν ChatGPT είναι γεμάτο αυτή τη στιγμή. Δοκιμάστε σε λίγο.';
+    return `Το ChatGPT δεν απάντησε (κωδικός ${g.status || 'χρόνου'}). ${g.error || ''}`; } },
   { re: /(ρυθμισε το (chatgpt|τσατ ?τζι ?πι ?τι|gpt)|βαλε (το )?(chatgpt|τσατ ?τζι ?πι ?τι)|chatgpt|τσατ ?τζι ?πι ?τι|openrouter)/, run: () => {
     setTimeout(() => { $('#settings').classList.remove('hidden'); fillSettings(); const el = document.querySelector('[data-k="gptKey"]'); if (el) el.scrollIntoView({ block: 'center' }); }, 8000);
     return { text: 'Ρύθμιση ChatGPT', html: `<b>🤖 Δωρεάν εφεδρικός ChatGPT, σε 4 βήματα</b>
