@@ -182,7 +182,19 @@ if (A) {
       else say('Η ακρόαση σταμάτησε. Εγώ συνεχίζω να δουλεύω κανονικά. Πατήστε «Αντιγραφή αναφοράς» και στείλτε τη στον δημιουργό σας.', { noRelisten: true });
     },
   };
-  window.__nativeWakeState = (st) => { if (st === 'died' && WakeTest.t) setTimeout(() => WakeTest.done(false), 600); else if (st === 'died') { Banner.clear('wake'); toast('ΑΚΡΟΑΣΗ', 'Η ακρόαση «Τζάρβις» τερματίστηκε από το κινητό. Γράψτε «αναφορά ακρόασης» για λεπτομέρειες.', 9000); } };
+  let wakeRevived = 0;
+  window.__nativeWakeState = (st) => {
+    if (st === 'died' && WakeTest.t) return setTimeout(() => WakeTest.done(false), 600);
+    if (st !== 'died') return;
+    // Η υπηρεσία ακρόασης έκλεισε: την ξαναξεκινάμε μόνοι μας (έως μία φορά το λεπτό), αντί να χρειάζεται κλείσιμο της εφαρμογής.
+    if (Wake.on && Date.now() - wakeRevived > 60000) { wakeRevived = Date.now(); setTimeout(() => { try { A.setWakeEnabled(true); } catch {} }, 3000); return; }
+    Banner.clear('wake'); toast('ΑΚΡΟΑΣΗ', 'Η ακρόαση «Τζάρβις» τερματίστηκε από το κινητό. Κλείστε και ανοίξτε ξανά την εφαρμογή.', 9000);
+  };
+  // Φύλακας: όταν η εφαρμογή δεν ακούει και δεν μιλάει, ζητάμε κάθε 20″ από την ακρόαση «Τζάρβις» να συνεχίσει.
+  // Αν ήδη ακούει, το κινητό το αγνοεί· αν είχε κολλήσει (π.χ. μικρόφωνο απασχολημένο), ξαναρχίζει.
+  setInterval(() => {
+    try { if (Wake.on && !Voice.listening && !Voice.speakingNow && !(typeof Session !== 'undefined' && Session.active) && followUp === 0 && Date.now() - followAt > 25000) A.wakeDone(); } catch {}
+  }, 20000);
   intents.unshift(
     { re: /(δοκιμη ακροασησ|δοκιμασε (ξανα )?την ακροαση|ξαναδοκιμασε την ακροαση|ενεργοποιησε την ακροαση τζαρβισ|τεστ ακροασησ)/, run: () => WakeTest.start() },
     { re: /(αναφορα ακροασησ|τι εγινε με την ακροαση|log ακροασησ)/, run: () => { WakeTest.el = null; WakeTest.render(true); return { silent: true, text: '' }; } },
