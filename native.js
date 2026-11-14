@@ -42,6 +42,7 @@ if (A) {
     return out;
   };
   Voice.speak = async function (text) {
+    if (Session.active && (Voice.listening || Date.now() - sessWakeAt < 9000)) return;
     const clean = String(text).replace(/<[^>]+>/g, '').replace(/[\u{1F300}-\u{1FAFF}☀-➿]/gu, '').replace(/\*+/g, '').trim();
     if (!clean) return;
     const my = ++speakToken;
@@ -67,6 +68,9 @@ if (A) {
   let followUp = 0, followAt = 0;
   // «Τζάρβις» ενώ παίζει ραδιόφωνο/μουσική: ακούω αμέσως· αν δεν πιάσω λέξη (π.χ. «Τζάρβις σταμάτα» μονορούφι), σταματάω τον ήχο.
   let mediaWakeAt = 0;
+  // «Τζάρβις» μέσα σε πρόγραμμα (γιόγκα κ.λπ.): η μουσική χαμηλώνει και οι οδηγίες σωπαίνουν όσο ακούω.
+  let sessWakeAt = 0;
+  const musicDuck = (on) => { try { const n = Music.n, ctx = Sound.ctx; if (!n || !ctx) return; n.out.gain.cancelScheduledValues(ctx.currentTime); n.out.gain.setTargetAtTime(on ? 0.08 : 0.9, ctx.currentTime, 0.15); } catch {} };
   const mediaOn = () => !!((window.Radio && Radio.on) || Music.n || (typeof Party !== 'undefined' && Party.on));
   // Κλειστή από προεπιλογή: κρατά το μικρόφωνο όσο μιλάω και σε κάποια κινητά καθυστερεί ή μπλοκάρει την επόμενη ακρόαση.
   if (!S.bargeResetV2) { S.bargeResetV2 = true; S.bargeResetV1 = true; S.bargeIn = true; S.bargeSens = 2; saveSettings(); }
@@ -124,10 +128,13 @@ if (A) {
     // Αν το κινητό δεν έδωσε τελικό κείμενο, κρατάμε ό,τι είχε ακούσει ως εκείνη τη στιγμή.
     const t = (finalText || partialText).trim(); finalText = ''; partialText = '';
     if (t && Date.now() - bargeAt < 8000 && t.split(/\s+/).length === 1 && !/^(ναι|οχι|όχι|οκ|ok|τέλος|τελος|άλλο|αλλο)$/i.test(t)) { bargeFalse = 0; bargeAt = 0; try { closeAll(); } catch {} addMsg('ai', '■ Σταμάτησα.'); A.wakeDone(); }
-    else if (t) { missCount = 0; followUp = 0; mediaWakeAt = 0; if (Date.now() - bargeAt < 15000) bargeFalse = 0; lastVoiceCmd = Date.now(); tHeard = Date.now(); T.listen = tStart ? (tHeard - tStart) / 1000 : 0; if (!stopSessionIf(t)) handle(t); }
+    else if (t) { const wasSess = !!sessWakeAt; sessWakeAt = 0; missCount = 0; followUp = 0; mediaWakeAt = 0; if (Date.now() - bargeAt < 15000) bargeFalse = 0; lastVoiceCmd = Date.now(); tHeard = Date.now(); T.listen = tStart ? (tHeard - tStart) / 1000 : 0; if (!stopSessionIf(t)) { if (wasSess) musicDuck(false); handle(t); } }
     else {
       // Διακοπή χωρίς λόγια = λάθος συναγερμός (άκουσα τη δική μου φωνή). Μετά από 2, γίνομαι λιγότερο ευαίσθητος· στο ελάχιστο, την κλείνω.
       const barge = Date.now() - bargeAt < 15000;
+      // «Τζάρβις σταμάτα» μονορούφι: το «σταμάτα» ειπώθηκε πριν αρχίσω να ακούω. Σιωπή μετά το «Τζάρβις» μέσα σε πρόγραμμα = τέλος.
+      if (sessWakeAt && Date.now() - sessWakeAt < 15000 && Session.active) { sessWakeAt = 0; musicDuck(false); stopSessionIf('σταματα'); return; }
+      if (sessWakeAt) { sessWakeAt = 0; musicDuck(false); }
       if (mediaWakeAt && Date.now() - mediaWakeAt < 15000 && mediaOn()) { mediaWakeAt = 0; stopSessionIf('σταματα'); return; }
       mediaWakeAt = 0;
       // Σιωπή στη συνέχεια της συζήτησης: ξανακούω (έως 3 φορές, περίπου 20″) πριν γυρίσω στην αναμονή για «Τζάρβις».
@@ -160,7 +167,7 @@ if (A) {
     if (typeof Standby !== 'undefined' && Standby.on) Standby.hide();
     // Μέσα σε πρόγραμμα (γιόγκα, διαλογισμός, γυμναστική): «Τζάρβις» κόβει τη φωνή και ακούει, π.χ. «σταμάτα». Το πρόγραμμα συνεχίζει αν δεν ειπωθεί κάτι.
     if (!Session.active && mediaOn()) { speechSynthesis.cancel(); Sound.listen(); lastVoiceCmd = Date.now(); followUp = 0; followAt = Date.now(); mediaWakeAt = Date.now(); try { if (window.Radio && Radio.audio) Radio.audio.volume = 0.1; } catch {} setTimeout(() => A.listen(), 60); return; }
-    if (Session.active) { speechSynthesis.cancel(); Sound.listen(); toast('ΠΡΟΓΡΑΜΜΑ', 'Σας ακούω. Πείτε «σταμάτα» για τέλος.', 4000); lastVoiceCmd = Date.now(); followUp = 0; followAt = Date.now(); setTimeout(() => A.listen(), 150); return; }
+    if (Session.active) { sessWakeAt = Date.now(); musicDuck(true); speechSynthesis.cancel(); Sound.listen(); toast('ΠΡΟΓΡΑΜΜΑ', 'Σας ακούω. Πείτε «σταμάτα» για τέλος.', 4000); lastVoiceCmd = Date.now(); followUp = 0; followAt = Date.now(); setTimeout(() => A.listen(), 150); return; }
     const line = callReply(); Sound.listen(); addMsg('ai', line);
     await Voice.speak(line);
     lastVoiceCmd = Date.now(); followUp = 2; followAt = Date.now(); A.listen();
