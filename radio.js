@@ -32,8 +32,13 @@ const Radio = {
     else res = await get(`search?countrycode=GR${qs}`);
     // Μόνο ροές που μπορούν να παίξουν σε σελίδα https (οι http δοκιμάζονται ως https).
     const seen = new Set();
-    return res.map((s) => ({ name: (s.name || '').trim(), url: (s.url_resolved || s.url || '').replace(/^http:\/\//, 'https://') }))
+    const out = res.map((s) => ({ name: (s.name || '').trim(), url: (s.url_resolved || s.url || '').replace(/^http:\/\//, 'https://') }))
       .filter((s) => s.url && s.name && !seen.has(s.name.toLowerCase()) && seen.add(s.name.toLowerCase()));
+    if (q.name || q.tag) return out;
+    // «Βάλε ραδιόφωνο» σκέτο: πρώτα οι γνωστοί ελληνικοί σταθμοί, όχι οι σταθμοί χαλάρωσης του καταλόγου.
+    const fav = ['sfera', 'love radio', 'kiss', 'rythmos', 'skai', 'derti', 'menta', 'pepper', 'easy', 'cosmo'];
+    const rank = (x) => { const i = fav.findIndex((f) => x.name.toLowerCase().includes(f)); return i < 0 ? 99 : i; };
+    return out.filter((x) => !/chill|psy|vanilla|lounge|ambient|trance/i.test(x.name)).sort((a, b) => rank(a) - rank(b));
   },
   playAt(i) {
     return new Promise((done) => {
@@ -79,10 +84,10 @@ function radioQuery(n) {
   return {};
 }
 intents.unshift(
-  { re: /(ραδιοφων|σταθμο|radio|ραδιο )/, test: (n) => /(βαλε|παιξε|ανοιξε|θελω|ακουσω|ακουσουμε|ραδιοφωνο)/.test(n) && !/(κλεισ|σταματ|κατεβασ|χαμηλωσ|δυναμωσ|ανεβασ|επομεν|αλλο σταθμο|αλλαξε|ποιοσ σταθμοσ|τι παιζει)/.test(n), run: async (raw, n) => {
+  { re: /(ραδιοφων|σταθμο|radio|ραδιο|ραδιο$)/, test: (n) => (/(βαλε|παιξε|ανοιξε|θελω|ακουσω|ακουσουμε|ραδιοφωνο)/.test(n) || /^(το )?(ραδιο|radio)( παρακαλω)?$/.test(n)) && !/(κλεισ|σταματ|κατεβασ|χαμηλωσ|δυναμωσ|ανεβασ|επομεν|αλλο σταθμο|αλλαξε|ποιοσ σταθμοσ|τι παιζει)/.test(n), run: async (raw, n) => {
     let q = radioQuery(n);
     // «Βάλε ραδιόφωνο» σκέτο: ο τελευταίος σταθμός που άκουσε.
-    if (!q.name && !q.tag) { const last = Store.get('radioLast', null); if (last) { Radio.list = [last]; if (await Radio.start(0, 1)) return `Ραδιόφωνο: ${Radio.name}.`; } }
+    if (!q.name && !q.tag) { const last = Store.get('radioLast', null); if (last && !/chill|psy|vanilla|lounge|ambient|trance/i.test(last.name)) { Radio.list = [last]; if (await Radio.start(0, 1)) return `Ραδιόφωνο: ${Radio.name}.`; } }
     Core.set('thinking');
     if (await Radio.play(q)) return `Ραδιόφωνο: ${Radio.name}. Πείτε «επόμενος σταθμός» για αλλαγή.`;
     return navigator.onLine ? 'Δεν βρήκα σταθμό που να παίζει αυτή τη στιγμή. Δοκιμάστε άλλον, π.χ. «βάλε Σκάι» ή «βάλε ελληνικά τραγούδια στο ραδιόφωνο».' : 'Για ραδιόφωνο χρειάζομαι ίντερνετ.';
