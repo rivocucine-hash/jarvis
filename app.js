@@ -16,7 +16,7 @@ const Store = {
 const defaults = {
   userName: '', assistant: 'JARVIS', city: '', voiceURI: '', rate: 1.0, pitch: 0.85,
   sounds: true, hum: false, convo: false, geminiKey: '', model: 'gemini-flash-latest',
-  aiProvider: 'gemini', aiKey: '', aiModel: '', gptKey: '',
+  aiProvider: 'gemini', aiKey: '', aiModel: '', gptKey: '', groqKey: '',
   cities: 'Αθήνα, Αγρίνιο', weight: 0, wakeTime: '07:00', teams: 'Ολυμπιακός, Παναθηναϊκός', budget: 0, tmdbKey: '',
   wake: false, theme: 'reactor', waterRemind: true, autoBrief: true, lastBrief: '',
 };
@@ -346,7 +346,7 @@ const AI_PROVIDERS = {
   groq: { url: 'https://api.groq.com/openai/v1/chat/completions', model: 'llama-3.3-70b-versatile', name: 'Groq' },
   openrouter: { url: 'https://openrouter.ai/api/v1/chat/completions', model: 'meta-llama/llama-3.3-70b-instruct:free', name: 'OpenRouter' },
 };
-function hasAI() { const p = S.aiProvider || 'gemini'; return p === 'gemini' ? !!S.geminiKey : !!S.aiKey; }
+function hasAI() { const p = S.aiProvider || 'gemini'; return p === 'gemini' ? !!(S.geminiKey || S.groqKey) : !!S.aiKey; }
 /* Χωρίς κλειδί: δωρεάν υπηρεσία χωρίς εγγραφή (όριο περίπου 1 απάντηση ανά 45″). Με κλειδί Gemini/Groq δεν υπάρχει αυτό το όριο. */
 const FREE_AI_URL = 'https://text.pollinations.ai/openai';
 let freeAiNext = 0;
@@ -381,6 +381,25 @@ async function askGPT(messages) {
   }
   return res;
 }
+/* Γρήγορος εγκέφαλος Groq (δωρεάν, με κλειδί του χρήστη): απαντά σε ~1″. Για απλές ερωτήσεις πάει πρώτος, για δύσκολες μένει εφεδρικός. */
+let groqBlockedUntil = 0;
+async function askGroq(sys, history, ms = 8000) {
+  if (!S.groqKey || !navigator.onLine || Date.now() < groqBlockedUntil) return { status: -1 };
+  const messages = [{ role: 'system', content: sys }, ...history.map((m) => ({ role: m.role === 'model' ? 'assistant' : 'user', content: m.parts.map((x) => x.text).join('') }))];
+  let res = { status: 0 };
+  for (const gm of ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant']) {
+    try {
+      const r = await fetch('https://api.groq.com/openai/v1/chat/completions', { signal: AbortSignal.timeout ? AbortSignal.timeout(ms) : undefined, method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + S.groqKey }, body: JSON.stringify({ model: gm, messages, temperature: 0.6, max_tokens: 800 }) });
+      const j = await r.json().catch(() => ({})); const o = (j.choices?.[0]?.message?.content || '').trim();
+      if (r.ok && o) return { text: o, model: gm };
+      res = { status: r.status, error: String(j.error?.message || '').slice(0, 300) };
+      window.lastAiError = { at: Date.now(), status: r.status, message: res.error, model: gm };
+      if (r.status === 401 || r.status === 403) return res;
+    } catch {}
+  }
+  if (res.status === 429) groqBlockedUntil = Date.now() + 60000;
+  return res;
+}
 async function askAI(text) {
   if (!hasAI()) {
     if (!S.freeAI) return null;
@@ -403,6 +422,12 @@ async function askAI(text) {
     }
     // Για ερωτήσεις επικαιρότητας ή «ψάξε/βρες/πρότεινε», ο εγκέφαλος ψάχνει στο Google (δωρεάν λειτουργία του Gemini). Αν δεν επιτρέπεται, απαντά χωρίς αναζήτηση.
     // Αναζήτηση στο Google μόνο όταν ζητείται καθαρά (είναι πιο αργή από μια απλή απάντηση).
+    const nt = norm(text);
+    const hardQ = /(γραψε|συνταξε|εξηγησε|αναλυσε|αναλυτικα|λεπτομερ|ποιημα|ιστορια για|email|μειλ|γραμμα|συγκρινε|σχεδιο|μεταφρασε|περιληψη|συμβουλη για|τι να κανω με)/.test(nt) || nt.split(' ').length > 25;
+    const tryGroq = async () => { const g = await askGroq(sys, aiHistory); if (g.text) { aiHistory.push({ role: 'model', parts: [{ text: g.text }] }); return g.text; } return null; };
+    const wantSearch0 = /(ψαξε|βρεσ μου|βρεσ |αναζητησ|τελευταια νεα|ειδησεισ για|τιμη |ποσο κανει|ποσο κοστιζει|ποτε παιζει|αποτελεσμα|σκορ|ποιοσ κερδισε|ωραριο|ειναι ανοιχτ|στο ιντερνετ|στο google)/.test(nt);
+    let groqTried = false;
+    if (S.groqKey && (!S.geminiKey || (!hardQ && !wantSearch0))) { groqTried = true; const o = await tryGroq(); if (o) return o; if (!S.geminiKey) { aiHistory.pop(); return 'Ο γρήγορος εγκέφαλος δεν απάντησε. Πείτε «δοκίμασε το Groq» για να ελέγξω το κλειδί.'; } }
     const wantSearch = S.webSearch !== false && navigator.onLine && /(ψαξε|βρεσ μου|βρεσ |αναζητησ|τελευταια νεα|ειδησεισ για|τιμη |ποσο κανει|ποσο κοστιζει|ποτε παιζει|αποτελεσμα|σκορ|ποιοσ κερδισε|προτεινε μου|ωραριο|ειναι ανοιχτ|στο ιντερνετ|στο google)/.test(norm(text));
     // Κάθε μοντέλο Gemini έχει δικό του δωρεάν όριο. Όταν ένα εξαντλείται (429), περνάμε στο επόμενο και το θυμόμαστε μέχρι να ξαναγεμίσει.
     const mainModel = S.model || defaults.model;
@@ -456,6 +481,7 @@ async function askAI(text) {
         const j3 = await r3.json().catch(() => ({})); if (r3.ok) { r = r3; j = j3; }
       } catch {}
     }
+    if (!r.ok && S.groqKey && !groqTried) { const o = await tryGroq(); if (o) return o; }
     if (!r.ok) {
       aiHistory.pop();
       // Το τεχνικό μήνυμα κρατιέται για διάγνωση («τι σφάλμα έβγαλε ο εγκέφαλος»), δεν εκφωνείται.
@@ -681,13 +707,20 @@ async function handle(raw) {
   const guess = window.understand ? understand(n2) : null;
   if (guess) { const g = await runIntents(guess, norm(guess)); if (g != null) return done(guess, g); }
   // fallback: ο εγκέφαλος ΤΝ απαντά ή διαλέγει εντολή
-  const ai = await askAI(raw);
+  let ai = await askAI(raw);
   if (ai) {
+    // Αυτόματη μνήμη: ο εγκέφαλος σημειώνει μόνιμα στοιχεία με «ΘΥΜΗΣΟΥ: …» (κρατιούνται σιωπηλά, έως 120 χαρακτήρες το καθένα).
+    const learned = []; ai = ai.replace(/^\s*«?ΘΥΜΗΣΟΥ:\s*(.+?)»?\s*$/gim, (_, f) => { learned.push(f.trim().slice(0, 120)); return ''; }).trim();
+    if (learned.length && window.addFact) learned.slice(0, 2).forEach((f) => { try { if (!/(ΕΝΤΟΛΗ|http|<|>)/i.test(f) && !/ήδη/.test(addFact(f) || 'ήδη')) toast('🧠 ΜΝΗΜΗ', `Θα θυμάμαι: ${f}`, 5000); } catch {} });
+    if (!ai && learned.length) return respond('Το κράτησα στη μνήμη μου.');
     // Ο εγκέφαλος μπορεί να διαλέξει ΜΟΝΟ εντολή από τη σταθερή, ακίνδυνη λίστα (aiAllowed), και μόνο αν όλη η απάντηση είναι αυτή η γραμμή.
     const cm = ai.trim().match(/^«?ΕΝΤΟΛΗ:\s*«?([^»\n]+?)[.»"\s]*$/i);
     if (cm) {
       const key = norm(cm[1].replace(/[;?]/g, '')); const allowed = window.aiAllowed ? aiAllowed().find((c) => norm(c.replace(/[;?]/g, '')) === key) : null;
       if (allowed) { const o = await runIntents(allowed, norm(allowed)); if (o != null) return respond(o); }
+      // Ελεύθερη φράση που ο εγκέφαλος ξανάγραψε ως ακίνδυνη εντολή (π.χ. ημερολόγιο, υπενθύμιση, ραδιόφωνο).
+      const safe = window.aiSafeCommand ? aiSafeCommand(cm[1]) : null;
+      if (safe) { const o = await runIntents(safe, norm(safe)); if (o != null) return done(safe, o); }
     }
     const clean = ai.replace(/«?ΕΝΤΟΛΗ:[^\n]*/gi, '').trim();
     if (clean) return respond(clean);

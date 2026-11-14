@@ -93,6 +93,23 @@ intents.unshift(
       <div>4. Γυρίστε εδώ, πατήστε <b>⚙ → Κλειδί Gemini API</b> και κάντε επικόλληση. Θα το δοκιμάσω αμέσως.</div>
       <div style="margin-top:6px;opacity:.75">Είναι δωρεάν και δεν ζητάει κάρτα. Το κλειδί μένει μόνο στο κινητό σας.</div>`,
       speak: 'Σε τέσσερα βήματα. Ένα: πατήστε τον σύνδεσμο στην οθόνη. Δύο: συνδεθείτε με το Google σας. Τρία: πατήστε Create API key και μετά Copy. Τέσσερα: γυρίστε εδώ, ανοίξτε τις ρυθμίσεις και κάντε επικόλληση στο Κλειδί Gemini. Θα το δοκιμάσω αμέσως.' }; } },
+  { re: /(δοκιμασε|δοκιμη|ελεγξε|τεσταρε) (το |τον )?(groq|γκροκ|γρηγορο εγκεφαλο)/, run: async () => {
+    if (!S.groqKey) return 'Δεν βρίσκω κλειδί Groq. Πείτε «ρύθμισε το Groq» για οδηγίες.';
+    Core.set('thinking'); const t0 = Date.now();
+    const g = await askGroq('Απάντησε στα ελληνικά, σε μία σύντομη πρόταση, χωρίς emoji.', [{ role: 'user', parts: [{ text: 'Πες ένα σύντομο γεια και ότι είσαι έτοιμος.' }] }]);
+    if (g.text) return `Ο γρήγορος εγκέφαλος δουλεύει, σε ${((Date.now() - t0) / 1000).toFixed(1)} δευτερόλεπτα. Είπε: ${g.text}`;
+    if (g.status === 401 || g.status === 403) return 'Το Groq δεν δέχεται το κλειδί. Αντιγράψτε το ξανά ολόκληρο, ξεκινά με gsk.';
+    if (g.status === 429) return 'Το κλειδί είναι σωστό, αλλά το Groq είναι γεμάτο αυτή τη στιγμή. Δοκιμάστε σε ένα λεπτό.';
+    return `Το Groq δεν απάντησε (κωδικός ${g.status || 'χρόνου'}).`; } },
+  { re: /(ρυθμισε το (groq|γκροκ)|βαλε (το )?(groq|γκροκ)|γρηγορο εγκεφαλο|^groq$|^γκροκ$)/, run: () => {
+    setTimeout(() => { $('#settings').classList.remove('hidden'); fillSettings(); const el = document.querySelector('[data-k="groqKey"]'); if (el) el.scrollIntoView({ block: 'center' }); }, 8000);
+    return { text: 'Ρύθμιση Groq', html: `<b>⚡ Δωρεάν γρήγορος εγκέφαλος Groq, σε 4 βήματα</b>
+      <div style="margin-top:6px">1. Πατήστε εδώ: <a href="https://console.groq.com/keys" target="_blank" rel="noopener">console.groq.com/keys →</a></div>
+      <div>2. Συνδεθείτε με το Google σας.</div>
+      <div>3. Πατήστε <b>Create API Key</b>, όνομα JARVIS, <b>Submit</b> και μετά <b>Copy</b>.</div>
+      <div>4. Γυρίστε εδώ, ⚙ → <b>Γρήγορος εγκέφαλος Groq</b>, και κάντε επικόλληση. Μετά πείτε «δοκίμασε το Groq».</div>
+      <div style="margin-top:6px;opacity:.75">Δωρεάν, χωρίς κάρτα. Απαντά στις απλές ερωτήσεις σε περίπου ένα δευτερόλεπτο· οι δύσκολες πάνε στο Gemini.</div>`,
+      speak: 'Σε τέσσερα βήματα. Ένα: πατήστε τον σύνδεσμο. Δύο: συνδεθείτε με το Google σας. Τρία: πατήστε Create API Key και μετά Copy. Τέσσερα: γυρίστε εδώ, στις ρυθμίσεις, στο Γρήγορος εγκέφαλος Groq, και κάντε επικόλληση.' }; } },
   { re: /(δοκιμασε|δοκιμη|ελεγξε|τεσταρε) (το |τον )?(chatgpt|τσατ ?τζι ?πι ?τι|gpt|εφεδρικο)/, run: async () => {
     if (!gptKey()) return 'Δεν βρίσκω κλειδί ChatGPT. Ανοίξτε τις ρυθμίσεις και κάντε επικόλληση στο «Εφεδρικός ChatGPT».';
     Core.set('thinking');
