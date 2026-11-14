@@ -1,7 +1,8 @@
 /* ---------------- ΗΜΕΡΟΛΟΓΙΟ ----------------
    Ραντεβού για συγκεκριμένη ημερομηνία (όχι κάθε εβδομάδα), με ειδοποίηση μία ώρα πριν.
    Η προβολή ημέρας ενώνει: ραντεβού, εβδομαδιαίο πρόγραμμα, υπενθυμίσεις, γενέθλια και το ημερολόγιο του κινητού. */
-let events = Store.get('events', []); // {id, date:'YYYY-MM-DD', time:'HH:MM'|'', text, remId}
+// Μόνο εγγραφές με σωστή μορφή (π.χ. από επαναφορά αντιγράφου), ώστε τίποτα ξένο να μη φτάνει στην οθόνη.
+let events = Store.get('events', []).filter((e) => e && /^[\w-]{1,40}$/.test(String(e.id)) && /^\d{4}-\d{2}-\d{2}$/.test(e.date) && /^(\d{2}:\d{2})?$/.test(e.time || '') && typeof e.text === 'string'); // {id, date:'YYYY-MM-DD', time:'HH:MM'|'', text, remId}
 const dstr = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 const dOf = (s) => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
 const MONTHS_GEN = ['Ιανουαρίου', 'Φεβρουαρίου', 'Μαρτίου', 'Απριλίου', 'Μαΐου', 'Ιουνίου', 'Ιουλίου', 'Αυγούστου', 'Σεπτεμβρίου', 'Οκτωβρίου', 'Νοεμβρίου', 'Δεκεμβρίου'];
@@ -157,7 +158,7 @@ TABS.unshift({ k: 'cal', label: 'ΗΜΕΡΟΛΟΓΙΟ', get: () => events, set: 
       <div class="cal-grid">${['Δε', 'Τρ', 'Τε', 'Πε', 'Πα', 'Σα', 'Κυ'].map((x) => `<span class="cdn">${x}</span>`).join('')}${cells}</div>
       <div class="cal-legend"><span><i></i>ραντεβού</span><span><i class="a"></i>γενέθλια</span><span><i class="r"></i>υπενθυμίσεις</span></div>
       <div class="cal-day"><h4>${escapeHtml(dayName(sd).replace(/^./, (c) => c.toUpperCase()))}</h4>
-      ${items.length ? items.map((x) => `<div class="cev ${x.kind}"><b>${x.time ? x.time : x.kind === 'bd' ? '🎂' : '•'}</b><span>${escapeHtml(x.text)}<small>${{ ev: 'ραντεβού', week: 'κάθε εβδομάδα', rem: 'υπενθύμιση', bd: '', phone: 'ημερολόγιο κινητού' }[x.kind]}</small></span>${x.kind === 'ev' ? `<button type="button" class="cdel" data-id="${x.id}" title="Διαγραφή">✕</button>` : ''}</div>`).join('') : '<div class="cempty">— τίποτα —</div>'}
+      ${items.length ? items.map((x) => `<div class="cev ${x.kind}"><b>${x.time ? escapeHtml(String(x.time)) : x.kind === 'bd' ? '🎂' : '•'}</b><span>${escapeHtml(x.text)}<small>${{ ev: 'ραντεβού', week: 'κάθε εβδομάδα', rem: 'υπενθύμιση', bd: '', phone: 'ημερολόγιο κινητού' }[x.kind]}</small></span>${x.kind === 'ev' ? `<button type="button" class="cdel" data-id="${escapeHtml(String(x.id))}" title="Διαγραφή">✕</button>` : ''}</div>`).join('') : '<div class="cempty">— τίποτα —</div>'}
       <form class="cadd"><input name="time" type="time"><input name="text" placeholder="π.χ. Οδοντίατρος" required><button type="submit">+</button></form></div>`;
     ul.appendChild(li);
     li.querySelectorAll('[data-m]').forEach((b) => (b.onclick = () => { Sound.tap(); Cal.month = new Date(m.getFullYear(), m.getMonth() + +b.dataset.m, 1); renderMem(); }));
