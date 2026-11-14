@@ -163,10 +163,10 @@ if (A) {
   // Μέσα σε πρόγραμμα, κάθε φράση σταματήματος το κλείνει («τέλος γιόγκα», «φτάνει», «κλείσ' το»...), πριν από κάθε άλλη εντολή.
   const SESSION_STOP = /(σταματ|τελοσ|τερματισ|φτανει|αρκετα|κλεισ|stop|ακυρ|σωπα|σιωπη|ησυχια)/;
   // Ό,τι τρέχει: πρόγραμμα (γιόγκα, αναπνοές, διαλογισμός, γυμναστική, κρύο ντους, ρουτίνα), Pomodoro, μουσική/ήχοι ύπνου, πάρτι.
-  const running = () => { const r = []; if (Session.active) r.push('το πρόγραμμα'); if (typeof Pomo !== 'undefined' && Pomo.t) r.push('το Pomodoro'); if (Music.n) r.push('τη μουσική'); if (typeof Party !== 'undefined' && Party.on) r.push('το πάρτι'); return r; };
+  const running = () => { const r = []; if (Session.active) r.push('το πρόγραμμα'); if (typeof Pomo !== 'undefined' && Pomo.t) r.push('το Pomodoro'); if (Music.n) r.push('τη μουσική'); if (typeof Party !== 'undefined' && Party.on) r.push('το πάρτι'); if (window.Radio && Radio.on) r.push('το ραδιόφωνο'); return r; };
   const stopSessionIf = (t) => {
     const r = running(); if (!r.length || !SESSION_STOP.test(norm(t))) return false;
-    if (Session.active) Session.stop(); try { if (Pomo.t) Pomo.stop(true); } catch {} try { Music.stop(2); } catch {} try { if (Party.on) Party.stop(); } catch {}
+    if (Session.active) Session.stop(); try { if (Pomo.t) Pomo.stop(true); } catch {} try { Music.stop(2); } catch {} try { if (Party.on) Party.stop(); } catch {} try { if (window.Radio) Radio.stop(); } catch {}
     addMsg('user', t); say(`Σταμάτησα ${r.join(' και ')}.`, { noRelisten: true }); return true;
   };
 
