@@ -121,7 +121,7 @@ if (A) {
     // Αν το κινητό δεν έδωσε τελικό κείμενο, κρατάμε ό,τι είχε ακούσει ως εκείνη τη στιγμή.
     const t = (finalText || partialText).trim(); finalText = ''; partialText = '';
     if (t && Date.now() - bargeAt < 8000 && t.split(/\s+/).length === 1 && !/^(ναι|οχι|όχι|οκ|ok|τέλος|τελος|άλλο|αλλο)$/i.test(t)) { bargeFalse = 0; bargeAt = 0; try { closeAll(); } catch {} addMsg('ai', '■ Σταμάτησα.'); A.wakeDone(); }
-    else if (t) { missCount = 0; followUp = 0; if (Date.now() - bargeAt < 15000) bargeFalse = 0; lastVoiceCmd = Date.now(); tHeard = Date.now(); T.listen = tStart ? (tHeard - tStart) / 1000 : 0; handle(t); }
+    else if (t) { missCount = 0; followUp = 0; if (Date.now() - bargeAt < 15000) bargeFalse = 0; lastVoiceCmd = Date.now(); tHeard = Date.now(); T.listen = tStart ? (tHeard - tStart) / 1000 : 0; if (!stopSessionIf(t)) handle(t); }
     else {
       // Διακοπή χωρίς λόγια = λάθος συναγερμός (άκουσα τη δική μου φωνή). Μετά από 2, γίνομαι λιγότερο ευαίσθητος· στο ελάχιστο, την κλείνω.
       const barge = Date.now() - bargeAt < 15000;
@@ -153,12 +153,16 @@ if (A) {
   async function onWake() {
     if (!booted()) { await boot(); await sleep(600); }
     if (typeof Standby !== 'undefined' && Standby.on) Standby.hide();
-    if (Session.active) return A.wakeDone();
+    // Μέσα σε πρόγραμμα (γιόγκα, διαλογισμός, γυμναστική): «Τζάρβις» κόβει τη φωνή και ακούει, π.χ. «σταμάτα». Το πρόγραμμα συνεχίζει αν δεν ειπωθεί κάτι.
+    if (Session.active) { speechSynthesis.cancel(); Sound.listen(); toast('ΠΡΟΓΡΑΜΜΑ', 'Σας ακούω. Πείτε «σταμάτα» για τέλος.', 4000); lastVoiceCmd = Date.now(); followUp = 0; followAt = Date.now(); setTimeout(() => A.listen(), 150); return; }
     const line = callReply(); Sound.listen(); addMsg('ai', line);
     await Voice.speak(line);
     lastVoiceCmd = Date.now(); followUp = 2; followAt = Date.now(); A.listen();
   }
   window.__nativeWake = () => { onWake(); };
+  // Μέσα σε πρόγραμμα, κάθε φράση σταματήματος το κλείνει («τέλος γιόγκα», «φτάνει», «κλείσ' το»...), πριν από κάθε άλλη εντολή.
+  const SESSION_STOP = /(σταματ|τελοσ|τερματισ|φτανει|αρκετα|κλεισ|stop|ακυρ|σωπα|σιωπη|ησυχια)/;
+  const stopSessionIf = (t) => { if (!Session.active || !SESSION_STOP.test(norm(t))) return false; Session.stop(); try { Music.stop(2); } catch {} addMsg('user', t); say('Σταμάτησα το πρόγραμμα.', { noRelisten: true }); return true; };
 
   /* ---------- Η συνεχής ακρόαση γίνεται από την υπηρεσία του κινητού ---------- */
   // Η ακρόαση τρέχει σε ξεχωριστή διεργασία. Ξεκινάει αυτόματα μόνο αφού αποδειχθεί σταθερή σε αυτό το κινητό.
@@ -193,7 +197,7 @@ if (A) {
   // Φύλακας: όταν η εφαρμογή δεν ακούει και δεν μιλάει, ζητάμε κάθε 20″ από την ακρόαση «Τζάρβις» να συνεχίσει.
   // Αν ήδη ακούει, το κινητό το αγνοεί· αν είχε κολλήσει (π.χ. μικρόφωνο απασχολημένο), ξαναρχίζει.
   setInterval(() => {
-    try { if (Wake.on && !Voice.listening && !Voice.speakingNow && !(typeof Session !== 'undefined' && Session.active) && followUp === 0 && Date.now() - followAt > 25000) A.wakeDone(); } catch {}
+    try { if (Wake.on && !Voice.listening && !Voice.speakingNow && followUp === 0 && Date.now() - followAt > 25000) A.wakeDone(); } catch {}
   }, 20000);
   intents.unshift(
     { re: /(δοκιμη ακροασησ|δοκιμασε (ξανα )?την ακροαση|ξαναδοκιμασε την ακροαση|ενεργοποιησε την ακροαση τζαρβισ|τεστ ακροασησ)/, run: () => WakeTest.start() },
