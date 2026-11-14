@@ -591,6 +591,7 @@ class MainActivity : Activity() {
             main.post { if (on) { if (!wakeProven()) return@post; if (hasMic()) startWake() else askPermissions() } else WakeService.send(this@MainActivity, WakeService.ACTION_STOP) }
         }
         @JavascriptInterface fun isWakeEnabled(): Boolean = wakeEnabled()
+        @JavascriptInterface fun setSessionMode(on: Boolean) { main.post { WakeService.send(this@MainActivity, if (on) WakeService.ACTION_SESSION_ON else WakeService.ACTION_SESSION_OFF) } }
         @JavascriptInterface fun wakeDone() { main.postDelayed({ if (!listeningNative) WakeService.send(this@MainActivity, WakeService.ACTION_RESUME) }, 300) }
 
         @JavascriptInterface fun notify(title: String, body: String) {

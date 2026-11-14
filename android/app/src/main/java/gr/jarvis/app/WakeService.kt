@@ -43,6 +43,8 @@ class WakeService : Service(), RecognitionListener {
         const val ACTION_PAUSE = "gr.jarvis.app.PAUSE"
         const val ACTION_RESUME = "gr.jarvis.app.RESUME"
         const val ACTION_STOP = "gr.jarvis.app.STOP"
+        const val ACTION_SESSION_ON = "gr.jarvis.app.SESSION_ON"
+        const val ACTION_SESSION_OFF = "gr.jarvis.app.SESSION_OFF"
         const val LOG_FILE = "wake.log"
         const val OK_FILE = "wake.ok"
 
@@ -74,6 +76,8 @@ class WakeService : Service(), RecognitionListener {
     private var model: Model? = null
     private var speech: SpeechService? = null
     private var paused = false
+    /** Μέσα σε πρόγραμμα (γιόγκα, αναπνοές): μουσική και οδηγίες δεν αφήνουν παύση, οπότε ελέγχουμε και τα μισά αποτελέσματα. */
+    @Volatile private var sessionMode = false
     private var initStarted = false
     private var foreground = false
     private var lastWake = 0L
@@ -117,6 +121,8 @@ class WakeService : Service(), RecognitionListener {
         when (intent?.action) {
             ACTION_PAUSE -> if (initStarted) pause() else { stopSelf(); return START_NOT_STICKY }
             ACTION_RESUME -> if (initStarted) resume() else { stopSelf(); return START_NOT_STICKY }
+            ACTION_SESSION_ON -> { sessionMode = true; log("λειτουργία προγράμματος") }
+            ACTION_SESSION_OFF -> { sessionMode = false }
             ACTION_STOP -> { log("τερματισμός κατόπιν αιτήματος"); stopSelf(); return START_NOT_STICKY }
             else -> if (foreground && !initStarted) { initStarted = true; Thread({ init() }, "wake-init").start() }
         }
@@ -226,7 +232,11 @@ class WakeService : Service(), RecognitionListener {
     private fun resume() { paused = false; main.postDelayed({ startListening() }, 400) }
 
     /* ---------------- Vosk ---------------- */
-    override fun onPartialResult(hypothesis: String?) {}
+    override fun onPartialResult(hypothesis: String?) {
+        if (!sessionMode || paused) return
+        val t = try { JSONObject(hypothesis ?: "{}").optString("partial") } catch (_: Exception) { "" }
+        if (t.split(" ").contains("jarvis")) { log("«Τζάρβις» μέσα σε πρόγραμμα"); fire() }
+    }
     override fun onResult(hypothesis: String?) { check(hypothesis) }
     override fun onFinalResult(hypothesis: String?) { check(hypothesis) }
     override fun onError(exception: Exception?) { if (exception != null) logError("vosk", exception); stopListening(); main.postDelayed({ startListening() }, 2000) }
@@ -236,19 +246,24 @@ class WakeService : Service(), RecognitionListener {
         val json = try { JSONObject(hypothesis ?: "{}") } catch (_: Exception) { JSONObject() }
         val words = json.optString("text").trim().split(" ").filter { it.isNotEmpty() && it != "[unk]" }
         // Αυστηρός έλεγχος: μόνο η λέξη «jarvis» (μόνη της ή μετά από «hey»), και με υψηλή βεβαιότητα.
-        if (words.isEmpty() || words.last() != "jarvis" || words.size > 2 || (words.size == 2 && words[0] != "hey")) return
+        // Μετά το «jarvis» επιτρέπονται λέξεις (π.χ. «Τζάρβις σταμάτα» μονορούφι)· πριν από αυτό μόνο το «hey».
+        val at = words.indexOf("jarvis")
+        if (at < 0 || at > 1 || (at == 1 && words[0] != "hey")) return
         val arr = json.optJSONArray("result")
         if (arr != null) {
             var conf = 0.0
             for (i in 0 until arr.length()) { val o = arr.optJSONObject(i) ?: continue; if (o.optString("word") == "jarvis") conf = maxOf(conf, o.optDouble("conf", 0.0)) }
-            if (conf < 0.85) { log("αγνοήθηκε «jarvis» με βεβαιότητα " + String.format(java.util.Locale.US, "%.2f", conf)); return }
+            if (conf < (if (sessionMode) 0.6 else 0.85)) { log("αγνοήθηκε «jarvis» με βεβαιότητα " + String.format(java.util.Locale.US, "%.2f", conf)); return }
         }
+        fire()
+    }
+
+    private fun fire() {
         val now = SystemClock.elapsedRealtime()
         if (now - lastWake < 4000) return
         lastWake = now
         log("ΑΚΟΥΣΤΗΚΕ «Τζάρβις»")
-        pause()
-        wakeUp()
+        main.post { pause(); wakeUp() }
     }
 
     private fun wakeUp() {

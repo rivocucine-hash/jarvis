@@ -70,6 +70,11 @@ if (A) {
   let mediaWakeAt = 0;
   // «Τζάρβις» μέσα σε πρόγραμμα (γιόγκα κ.λπ.): η μουσική χαμηλώνει και οι οδηγίες σωπαίνουν όσο ακούω.
   let sessWakeAt = 0;
+  // Εφαρμογή v28+: όσο τρέχει πρόγραμμα, η ακρόαση πιάνει το «Τζάρβις» και μέσα από μουσική και οδηγίες.
+  const sessMode = (on) => { try { if (A.setSessionMode) A.setSessionMode(!!on); } catch {} };
+  const baseSessOpen = Session.open.bind(Session), baseSessClose = Session.close.bind(Session);
+  Session.open = (title) => { baseSessOpen(title); sessMode(true); };
+  Session.close = () => { baseSessClose(); sessMode(false); };
   const musicDuck = (on) => { try { const n = Music.n, ctx = Sound.ctx; if (!n || !ctx) return; n.out.gain.cancelScheduledValues(ctx.currentTime); n.out.gain.setTargetAtTime(on ? 0.08 : 0.9, ctx.currentTime, 0.15); } catch {} };
   const mediaOn = () => !!((window.Radio && Radio.on) || Music.n || (typeof Party !== 'undefined' && Party.on));
   // Κλειστή από προεπιλογή: κρατά το μικρόφωνο όσο μιλάω και σε κάποια κινητά καθυστερεί ή μπλοκάρει την επόμενη ακρόαση.
