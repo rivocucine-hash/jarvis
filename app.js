@@ -16,7 +16,7 @@ const Store = {
 const defaults = {
   userName: '', assistant: 'JARVIS', city: '', voiceURI: '', rate: 1.0, pitch: 0.85,
   sounds: true, hum: false, convo: false, geminiKey: '', model: 'gemini-flash-latest',
-  aiProvider: 'gemini', aiKey: '', aiModel: '', gptKey: '', groqKey: '', pexelsKey: '',
+  aiProvider: 'gemini', aiKey: '', aiModel: '', gptKey: '', groqKey: '', pexelsKey: '', pixabayKey: '',
   cities: 'Αθήνα, Αγρίνιο', weight: 0, wakeTime: '07:00', teams: 'Ολυμπιακός, Παναθηναϊκός', budget: 0, tmdbKey: '',
   wake: false, theme: 'reactor', waterRemind: true, autoBrief: true, lastBrief: '',
 };

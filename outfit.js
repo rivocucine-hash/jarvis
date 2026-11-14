@@ -4,17 +4,17 @@
    2) πραγματικές φωτογραφίες από το Pexels, αν ο χρήστης έχει βάλει δωρεάν κλειδί,
    3) κουμπί για περισσότερες φωτογραφίες στο Google Εικόνες. */
 const OUTFITS = {
-  hot: { top: ['Λινό πουκάμισο', '#f4f1e8'], bottom: ['Μπεζ chino', '#cdb48a'], shoes: ['Καφέ loafers', '#7a4a26'], q: 'men summer linen shirt beige chinos outfit', g: 'ανδρικό ντύσιμο λινό πουκάμισο μπεζ chino καλοκαίρι' },
-  mild: { top: ['Γαλάζιο oxford', '#a9c6e8'], layer: ['Navy overshirt', '#22324f'], bottom: ['Σκούρο τζιν', '#2d3a55'], shoes: ['Λευκά sneakers', '#f2f2f2'], q: 'men oxford shirt dark jeans white sneakers outfit', g: 'ανδρικό ντύσιμο oxford πουκάμισο σκούρο τζιν λευκά sneakers' },
-  cool: { top: ['Γκρι πλεκτό', '#8d9096'], layer: ['Λαδί μπουφάν', '#5a5f3c'], bottom: ['Σκούρο τζιν', '#2d3a55'], shoes: ['Καφέ suede μποτάκια', '#8a5a34'], q: 'men grey sweater jeans jacket autumn outfit', g: 'ανδρικό ντύσιμο γκρι πλεκτό τζιν μπουφάν φθινόπωρο' },
-  cold: { top: ['Navy ζιβάγκο', '#1f2a44'], layer: ['Καμηλό παλτό', '#c19a6b'], bottom: ['Ανθρακί παντελόνι', '#3b3f45'], shoes: ['Μαύρα Chelsea boots', '#1b1b1b'], q: 'men camel coat turtleneck winter outfit', g: 'ανδρικό ντύσιμο καμηλό παλτό ζιβάγκο χειμώνας' },
+  hot: { top: ['Λινό πουκάμισο', '#f4f1e8'], bottom: ['Μπεζ chino', '#cdb48a'], shoes: ['Καφέ loafers', '#7a4a26'], q: 'men summer linen shirt beige chinos outfit', pq: 'man summer fashion', g: 'ανδρικό ντύσιμο λινό πουκάμισο μπεζ chino καλοκαίρι' },
+  mild: { top: ['Γαλάζιο oxford', '#a9c6e8'], layer: ['Navy overshirt', '#22324f'], bottom: ['Σκούρο τζιν', '#2d3a55'], shoes: ['Λευκά sneakers', '#f2f2f2'], q: 'men oxford shirt dark jeans white sneakers outfit', pq: 'man casual fashion', g: 'ανδρικό ντύσιμο oxford πουκάμισο σκούρο τζιν λευκά sneakers' },
+  cool: { top: ['Γκρι πλεκτό', '#8d9096'], layer: ['Λαδί μπουφάν', '#5a5f3c'], bottom: ['Σκούρο τζιν', '#2d3a55'], shoes: ['Καφέ suede μποτάκια', '#8a5a34'], q: 'men grey sweater jeans jacket autumn outfit', pq: 'man autumn fashion', g: 'ανδρικό ντύσιμο γκρι πλεκτό τζιν μπουφάν φθινόπωρο' },
+  cold: { top: ['Navy ζιβάγκο', '#1f2a44'], layer: ['Καμηλό παλτό', '#c19a6b'], bottom: ['Ανθρακί παντελόνι', '#3b3f45'], shoes: ['Μαύρα Chelsea boots', '#1b1b1b'], q: 'men camel coat turtleneck winter outfit', pq: 'man winter coat fashion', g: 'ανδρικό ντύσιμο καμηλό παλτό ζιβάγκο χειμώνας' },
 };
 const OCC_OUTFITS = [
-  [/(ραντεβου|date)/, { top: ['Λευκό oxford', '#f5f5f2'], layer: ['Navy μπλέιζερ', '#1e2a46'], bottom: ['Σκούρο τζιν', '#2d3a55'], shoes: ['Καφέ suede', '#8a5a34'], q: 'men date night outfit blazer jeans', g: 'ανδρικό ντύσιμο για ραντεβού μπλέιζερ τζιν' }],
-  [/(γραφειο|δουλεια|συνεντευξη)/, { top: ['Γαλάζιο πουκάμισο', '#b9d0ea'], layer: ['Γκρι σακάκι', '#5d636b'], bottom: ['Navy παντελόνι', '#22304d'], shoes: ['Καφέ δερμάτινα', '#5b3a22'], q: 'men business casual office outfit', g: 'ανδρικό ντύσιμο γραφείο business casual' }],
-  [/(γαμο|βαπτιση|βαφτιση|εκδηλωση|επισημο)/, { top: ['Λευκό πουκάμισο', '#f7f7f5'], layer: ['Μπλε κοστούμι', '#2c4170'], bottom: ['Μπλε παντελόνι', '#2c4170'], shoes: ['Καφέ loafers', '#6b4226'], q: 'men blue suit wedding guest outfit', g: 'ανδρικό ντύσιμο γάμος μπλε κοστούμι' }],
-  [/(εξοδο|βραδυ|μπαρ|club)/, { top: ['Μαύρο T-shirt', '#161616'], layer: ['Δερμάτινο μπουφάν', '#2a2420'], bottom: ['Μαύρο τζιν', '#1d1f24'], shoes: ['Chelsea boots', '#1b1b1b'], q: 'men night out outfit leather jacket black jeans', g: 'ανδρικό ντύσιμο βραδινή έξοδος δερμάτινο μπουφάν' }],
-  [/(casual|καθημεριν|χαλαρ)/, { top: ['Λευκό T-shirt', '#f4f4f4'], layer: ['Γκρι φούτερ', '#9a9ea5'], bottom: ['Μπεζ chino', '#cdb48a'], shoes: ['Λευκά sneakers', '#f2f2f2'], q: 'men casual outfit white tshirt chinos sneakers', g: 'ανδρικό καθημερινό ντύσιμο λευκό t-shirt chino sneakers' }],
+  [/(ραντεβου|date)/, { top: ['Λευκό oxford', '#f5f5f2'], layer: ['Navy μπλέιζερ', '#1e2a46'], bottom: ['Σκούρο τζιν', '#2d3a55'], shoes: ['Καφέ suede', '#8a5a34'], q: 'men date night outfit blazer jeans', pq: 'man blazer fashion', g: 'ανδρικό ντύσιμο για ραντεβού μπλέιζερ τζιν' }],
+  [/(γραφειο|δουλεια|συνεντευξη)/, { top: ['Γαλάζιο πουκάμισο', '#b9d0ea'], layer: ['Γκρι σακάκι', '#5d636b'], bottom: ['Navy παντελόνι', '#22304d'], shoes: ['Καφέ δερμάτινα', '#5b3a22'], q: 'men business casual office outfit', pq: 'businessman fashion', g: 'ανδρικό ντύσιμο γραφείο business casual' }],
+  [/(γαμο|βαπτιση|βαφτιση|εκδηλωση|επισημο)/, { top: ['Λευκό πουκάμισο', '#f7f7f5'], layer: ['Μπλε κοστούμι', '#2c4170'], bottom: ['Μπλε παντελόνι', '#2c4170'], shoes: ['Καφέ loafers', '#6b4226'], q: 'men blue suit wedding guest outfit', pq: 'man suit', g: 'ανδρικό ντύσιμο γάμος μπλε κοστούμι' }],
+  [/(εξοδο|βραδυ|μπαρ|club)/, { top: ['Μαύρο T-shirt', '#161616'], layer: ['Δερμάτινο μπουφάν', '#2a2420'], bottom: ['Μαύρο τζιν', '#1d1f24'], shoes: ['Chelsea boots', '#1b1b1b'], q: 'men night out outfit leather jacket black jeans', pq: 'man leather jacket', g: 'ανδρικό ντύσιμο βραδινή έξοδος δερμάτινο μπουφάν' }],
+  [/(casual|καθημεριν|χαλαρ)/, { top: ['Λευκό T-shirt', '#f4f4f4'], layer: ['Γκρι φούτερ', '#9a9ea5'], bottom: ['Μπεζ chino', '#cdb48a'], shoes: ['Λευκά sneakers', '#f2f2f2'], q: 'men casual outfit white tshirt chinos sneakers', pq: 'man casual style', g: 'ανδρικό καθημερινό ντύσιμο λευκό t-shirt chino sneakers' }],
 ];
 const outfitFor = (n, t) => { const o = OCC_OUTFITS.find(([re]) => re.test(n)); if (o) return o[1]; return t == null ? OUTFITS.mild : t >= 28 ? OUTFITS.hot : t >= 20 ? OUTFITS.mild : t >= 12 ? OUTFITS.cool : OUTFITS.cold; };
 const safeColor = (c) => (/^#[0-9a-f]{6}$/i.test(c) ? c : '#888888');
@@ -35,6 +35,18 @@ function outfitLegend(o) {
 }
 
 /* Πραγματικές φωτογραφίες από το Pexels (δωρεάν κλειδί). Κρατιούνται 6 ώρες, για να μη χαλάμε το όριο. */
+/* Pixabay (δωρεάν κλειδί, φαίνεται στη σελίδα pixabay.com/api/docs μόλις συνδεθείτε). Κρατιούνται 24 ώρες, όπως ζητά το Pixabay. */
+async function pixabayPhotos(q) {
+  if (!S.pixabayKey || !navigator.onLine) return null;
+  const ck = Store.get('pix_' + q, null); if (ck && Date.now() - ck.at < 24 * 3600000) return ck.p;
+  try {
+    const r = await fetch(`https://pixabay.com/api/?key=${encodeURIComponent(S.pixabayKey)}&q=${encodeURIComponent(q)}&image_type=photo&orientation=vertical&safesearch=true&per_page=12`, { signal: AbortSignal.timeout ? AbortSignal.timeout(7000) : undefined });
+    if (!r.ok) return r.status === 400 || r.status === 401 || r.status === 403 ? 'bad' : null;
+    const j = await r.json();
+    const p = (j.hits || []).map((x) => ({ src: x.webformatURL, link: x.pageURL, by: x.user })).filter((x) => /^https:\/\/(pixabay\.com\/get\/|cdn\.pixabay\.com\/)/.test(x.src || '') && /^https:\/\/pixabay\.com\//.test(x.link || '')).slice(0, 6);
+    Store.set('pix_' + q, { at: Date.now(), p }); return p;
+  } catch { return null; }
+}
 async function pexelsPhotos(q) {
   if (!S.pexelsKey || !navigator.onLine) return null;
   const ck = Store.get('pex_' + q, null); if (ck && Date.now() - ck.at < 6 * 3600000) return ck.p;
@@ -53,21 +65,21 @@ if (typeof outfitToday === 'function') {
     const text = await baseOutfit(n);
     let t = null; try { const w = await getWeather(); t = Math.round(w.daily.temperature_2m_max[0]); } catch {}
     const o = outfitFor(n || '', t);
-    const photos = await pexelsPhotos(o.q);
+    const photos = S.pixabayKey ? await pixabayPhotos(o.pq || o.q) : await pexelsPhotos(o.q);
     const gUrl = 'https://www.google.com/search?tbm=isch&q=' + encodeURIComponent(o.g);
     let gallery = '';
-    if (Array.isArray(photos) && photos.length) gallery = `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-top:8px">${photos.slice(0, 6).map((p) => `<a href="${escapeHtml(p.link)}" target="_blank" rel="noopener"><img src="${escapeHtml(p.src)}" alt="Ιδέα ντυσίματος" loading="lazy" style="width:100%;aspect-ratio:3/4;object-fit:cover;border-radius:8px;display:block"></a>`).join('')}</div><div style="font-size:11px;opacity:.6;margin-top:3px">Φωτογραφίες: Pexels</div>`;
-    else if (photos === 'bad') gallery = '<div style="font-size:13px;opacity:.8;margin-top:6px">Το κλειδί Pexels δεν έγινε δεκτό. Πείτε «ρύθμισε τις φωτογραφίες».</div>';
+    if (Array.isArray(photos) && photos.length) gallery = `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-top:8px">${photos.slice(0, 6).map((p) => `<a href="${escapeHtml(p.link)}" target="_blank" rel="noopener"><img src="${escapeHtml(p.src)}" alt="Ιδέα ντυσίματος" loading="lazy" style="width:100%;aspect-ratio:3/4;object-fit:cover;border-radius:8px;display:block"></a>`).join('')}</div><div style="font-size:11px;opacity:.6;margin-top:3px">Φωτογραφίες: ${S.pixabayKey ? 'Pixabay' : 'Pexels'}</div>`;
+    else if (photos === 'bad') gallery = '<div style="font-size:13px;opacity:.8;margin-top:6px">Το κλειδί φωτογραφιών δεν έγινε δεκτό. Πείτε «ρύθμισε τις φωτογραφίες».</div>';
     const more = `<div style="margin-top:8px;text-align:center"><a href="${gUrl}" target="_blank" rel="noopener" style="display:inline-block;padding:7px 14px;border:1px solid var(--line);border-radius:999px;color:var(--cyan);text-decoration:none">📷 Περισσότερες φωτογραφίες</a></div>`;
-    return { text, html: `${escapeHtml(text)}${outfitSvg(o)}${outfitLegend(o)}${gallery}${more}${!S.pexelsKey ? '<div style="font-size:12px;opacity:.6;margin-top:6px;text-align:center">Για φωτογραφίες εδώ μέσα, πείτε «ρύθμισε τις φωτογραφίες».</div>' : ''}`, speak: text };
+    return { text, html: `${escapeHtml(text)}${outfitSvg(o)}${outfitLegend(o)}${gallery}${more}${!S.pexelsKey && !S.pixabayKey ? '<div style="font-size:12px;opacity:.6;margin-top:6px;text-align:center">Για φωτογραφίες εδώ μέσα, πείτε «ρύθμισε τις φωτογραφίες».</div>' : ''}`, speak: text };
   };
 }
 
-intents.unshift({ re: /(ρυθμισε τισ φωτογραφιεσ|κλειδι pexels|βαλε pexels|^pexels$|πεξελσ)/, run: () => {
-  setTimeout(() => { $('#settings').classList.remove('hidden'); fillSettings(); const el = document.querySelector('[data-k="pexelsKey"]'); if (el) el.scrollIntoView({ block: 'center' }); }, 9000);
-  return { text: 'Ρύθμιση φωτογραφιών', html: `<b>📷 Δωρεάν φωτογραφίες ντυσίματος (Pexels), σε 4 βήματα</b>
-    <div style="margin-top:6px">1. Πατήστε εδώ: <a href="https://www.pexels.com/api/new/" target="_blank" rel="noopener">pexels.com/api →</a></div>
-    <div>2. Φτιάξτε δωρεάν λογαριασμό (ή «Continue with Google»).</div>
-    <div>3. Συμπληρώστε σύντομα το ερωτηματολόγιο (π.χ. «Personal assistant app») και πατήστε <b>Generate API Key</b>. Αντιγράψτε το κλειδί.</div>
-    <div>4. Γυρίστε εδώ, ⚙ → <b>Κλειδί φωτογραφιών Pexels</b>, και κάντε επικόλληση. Μετά πείτε «τι να φορέσω».</div>`,
-    speak: 'Σε τέσσερα βήματα. Ένα: πατήστε τον σύνδεσμο. Δύο: φτιάξτε δωρεάν λογαριασμό με το Google σας. Τρία: πατήστε Generate API Key και αντιγράψτε το. Τέσσερα: γυρίστε εδώ, στις ρυθμίσεις, στο κλειδί φωτογραφιών Pexels, και κάντε επικόλληση.' }; } });
+intents.unshift({ re: /(ρυθμισε τισ φωτογραφιεσ|κλειδι (pexels|pixabay)|βαλε (pexels|pixabay)|^(pexels|pixabay)$|πιξαμπει|πεξελσ)/, run: () => {
+  setTimeout(() => { $('#settings').classList.remove('hidden'); fillSettings(); const el = document.querySelector('[data-k="pixabayKey"]'); if (el) el.scrollIntoView({ block: 'center' }); }, 9000);
+  return { text: 'Ρύθμιση φωτογραφιών', html: `<b>📷 Δωρεάν φωτογραφίες ντυσίματος (Pixabay), σε 4 βήματα</b>
+    <div style="margin-top:6px">1. Πατήστε εδώ: <a href="https://pixabay.com/accounts/register/" target="_blank" rel="noopener">pixabay.com, εγγραφή →</a> και φτιάξτε δωρεάν λογαριασμό (ή «Continue with Google»).</div>
+    <div>2. Μετά ανοίξτε αυτή τη σελίδα: <a href="https://pixabay.com/api/docs/" target="_blank" rel="noopener">pixabay.com/api/docs →</a></div>
+    <div>3. Κατεβείτε λίγο, στο σημείο <b>«Parameters»</b> → <b>key (required)</b>. Εκεί, με πράσινα γράμματα, είναι το κλειδί σας (αριθμοί και γράμματα). Αντιγράψτε το.</div>
+    <div>4. Γυρίστε εδώ, ⚙ → <b>Κλειδί φωτογραφιών Pixabay</b>, και κάντε επικόλληση. Μετά πείτε «τι να φορέσω».</div>`,
+    speak: 'Σε τέσσερα βήματα. Ένα: φτιάξτε δωρεάν λογαριασμό στο Pixabay με το Google σας. Δύο: ανοίξτε τη σελίδα pixabay τελεία com κάθετος api κάθετος docs. Τρία: κατεβείτε στο key, εκεί είναι το κλειδί σας με πράσινα γράμματα, αντιγράψτε το. Τέσσερα: γυρίστε εδώ, στις ρυθμίσεις, στο κλειδί φωτογραφιών Pixabay, και κάντε επικόλληση.' }; } });
