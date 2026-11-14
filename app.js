@@ -386,7 +386,22 @@ async function askAI(text) {
     // Για ερωτήσεις επικαιρότητας ή «ψάξε/βρες/πρότεινε», ο εγκέφαλος ψάχνει στο Google (δωρεάν λειτουργία του Gemini). Αν δεν επιτρέπεται, απαντά χωρίς αναζήτηση.
     // Αναζήτηση στο Google μόνο όταν ζητείται καθαρά (είναι πιο αργή από μια απλή απάντηση).
     const wantSearch = S.webSearch !== false && navigator.onLine && /(ψαξε|βρεσ μου|βρεσ |αναζητησ|τελευταια νεα|ειδησεισ για|τιμη |ποσο κανει|ποσο κοστιζει|ποτε παιζει|αποτελεσμα|σκορ|ποιοσ κερδισε|προτεινε μου|ωραριο|ειναι ανοιχτ|στο ιντερνετ|στο google)/.test(norm(text));
-    const gUrl = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(S.model || defaults.model)}:generateContent`;
+    // Κάθε μοντέλο Gemini έχει δικό του δωρεάν όριο. Όταν ένα εξαντλείται (429), περνάμε στο επόμενο και το θυμόμαστε μέχρι να ξαναγεμίσει.
+    const mainModel = S.model || defaults.model;
+    const models = [...new Set([mainModel, 'gemini-flash-lite-latest', 'gemini-2.5-flash-lite', 'gemini-2.0-flash', 'gemini-2.0-flash-lite'])];
+    const blocked = Store.get('aiBlocked', {}); const nowT = Date.now();
+    for (const k of Object.keys(blocked)) if (blocked[k].until <= nowT) delete blocked[k];
+    // Το ημερήσιο όριο της Google μηδενίζεται τα μεσάνυχτα ώρας Καλιφόρνιας (08:00 UTC, δηλαδή 10:00 ή 11:00 ώρα Ελλάδας).
+    const nextReset = () => { const d = new Date(); d.setUTCHours(8, 0, 0, 0); if (d.getTime() <= Date.now()) d.setUTCDate(d.getUTCDate() + 1); return d.getTime(); };
+    const blockModel = (m, j, status) => {
+      const msg = JSON.stringify(j.error || {});
+      const daily = status === 404 || /per ?day|PerDay|daily/i.test(msg);
+      const sec = parseInt((msg.match(/"retryDelay":"(\d+)/) || [])[1] || '60', 10);
+      blocked[m] = { until: daily ? nextReset() : Date.now() + Math.max(sec, 20) * 1000, daily };
+      try { Store.set('aiBlocked', blocked); } catch {}
+    };
+    const gUrlFor = (m) => `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(m)}:generateContent`;
+    let gUrl = gUrlFor(mainModel);
     // Το ιστορικό πρέπει να ξεκινά με τον χρήστη και να εναλλάσσεται χρήστης/βοηθός, αλλιώς το Gemini το απορρίπτει.
     const cleanHist = (h) => { const out = []; for (const m of h) { if (!out.length && m.role !== 'user') continue; const last = out[out.length - 1]; if (last && last.role === m.role) last.parts = [{ text: last.parts.map((x) => x.text).join('') + '\n' + m.parts.map((x) => x.text).join('') }]; else out.push({ role: m.role, parts: m.parts.map((x) => ({ text: x.text })) }); } return out; };
     const gReq = (search, fast, hist) => fetch(gUrl, {
@@ -397,13 +412,22 @@ async function askAI(text) {
     // Σειρά προσπαθειών: γρήγορη (χωρίς «σκέψη») → χωρίς αναζήτηση → απλή → μόνο η τελευταία ερώτηση.
     const full = cleanHist(aiHistory), lastOnly = [{ role: 'user', parts: [{ text }] }];
     const tries = [[wantSearch, S.aiNoFast !== true, full]]; if (wantSearch) tries.push([false, S.aiNoFast !== true, full]); tries.push([false, false, full], [false, false, lastOnly]);
-    let r, j;
-    for (let i = 0; i < tries.length; i++) {
-      try { r = await gReq(...tries[i]); j = await r.json().catch(() => ({})); } catch { r = { ok: false, status: 0 }; j = { error: { message: 'δεν απάντησε εγκαίρως' } }; continue; }
-      // Αν πέτυχε μόνο η απλή μορφή, την επόμενη φορά ξεκινάμε από αυτήν (χωρίς χαμένη προσπάθεια).
-      if (r.ok) { if (i > 0 && tries[0][1] && !tries[i][1]) { S.aiNoFast = true; saveSettings(); } break; }
-      if (r.status === 429 || r.status === 401 || r.status === 403) break; // όριο χρήσης ή πρόβλημα κλειδιού: δεν έχει νόημα η επανάληψη
-      if (tries[i][1] && /thinking/i.test(j.error?.message || '')) { S.aiNoFast = true; saveSettings(); }
+    let r = { ok: false, status: 429 }, j = { error: { message: 'όλα τα μοντέλα στο όριο' } }, usedModel = mainModel;
+    for (const m of models) {
+      if (blocked[m]) continue;
+      gUrl = gUrlFor(m); usedModel = m;
+      // Στο κύριο μοντέλο όλη η σειρά προσπαθειών· στα εφεδρικά μόνο μία απλή, για να μη χαλάμε κι εκείνων το όριο.
+      const list = m === mainModel ? tries : [[false, false, full]];
+      for (let i = 0; i < list.length; i++) {
+        try { r = await gReq(...list[i]); j = await r.json().catch(() => ({})); } catch { r = { ok: false, status: 0 }; j = { error: { message: 'δεν απάντησε εγκαίρως' } }; continue; }
+        // Αν πέτυχε μόνο η απλή μορφή, την επόμενη φορά ξεκινάμε από αυτήν (χωρίς χαμένη προσπάθεια).
+        if (r.ok) { if (m === mainModel && i > 0 && tries[0][1] && !tries[i][1]) { S.aiNoFast = true; saveSettings(); } break; }
+        if (r.status === 429 || r.status === 404 || r.status === 401 || r.status === 403) break; // όριο, άγνωστο μοντέλο ή κλειδί: δεν έχει νόημα η επανάληψη
+        if (list[i][1] && /thinking/i.test(j.error?.message || '')) { S.aiNoFast = true; saveSettings(); }
+      }
+      if (r.ok || r.status === 401 || r.status === 403) break;
+      if (r.status === 429 || r.status === 404) { blockModel(m, j, r.status); continue; }
+      break; // άλλο σφάλμα (υπερφόρτωση κ.λπ.): το χειρίζεται η παρακάτω προσπάθεια
     }
     // Υπερφόρτωση ή προσωρινό πρόβλημα του Gemini (5xx, λήξη χρόνου): μία ακόμη προσπάθεια με το ελαφρύτερο μοντέλο.
     if (!r.ok && (r.status === 0 || r.status >= 500)) {
@@ -417,9 +441,23 @@ async function askAI(text) {
     if (!r.ok) {
       aiHistory.pop();
       // Το τεχνικό μήνυμα κρατιέται για διάγνωση («τι σφάλμα έβγαλε ο εγκέφαλος»), δεν εκφωνείται.
-      window.lastAiError = { at: Date.now(), status: r.status, message: String(j.error?.message || '').slice(0, 300), model: S.model || defaults.model };
+      window.lastAiError = { at: Date.now(), status: r.status, message: String(j.error?.message || '').slice(0, 300), model: usedModel };
       try { Store.set('lastAiError', window.lastAiError); } catch {}
-      if (r.status === 429) return 'Ο δωρεάν εγκέφαλος έφτασε το όριο ερωτήσεων για αυτό το λεπτό. Δοκιμάστε ξανά σε λίγο.';
+      if (r.status === 429 || r.status === 404) {
+        // Τελευταία λύση: η δωρεάν υπηρεσία χωρίς κλειδί, μόνο αν ο χρήστης την έχει ενεργοποιήσει.
+        if (S.freeAI) {
+          aiHistory.push({ role: 'user', parts: [{ text }] });
+          const o = await askFreeAI(sys);
+          if (o) { aiHistory.push({ role: 'model', parts: [{ text: o }] }); return o; }
+          aiHistory.pop();
+        }
+        const left = models.filter((m) => !blocked[m]);
+        if (!left.length && models.some((m) => blocked[m]?.daily)) {
+          const t = new Date(Math.min(...models.map((m) => blocked[m].until)));
+          return `Το δωρεάν όριο της Google για σήμερα εξαντλήθηκε σε όλα τα μοντέλα. Ξαναγεμίζει στις ${t.getHours()}:${pad(t.getMinutes())}. Μέχρι τότε δουλεύουν κανονικά οι εντολές χωρίς εγκέφαλο: ώρα, καιρός, υπενθυμίσεις, σημειώσεις, μουσική.`;
+        }
+        return 'Ο δωρεάν εγκέφαλος έφτασε το όριο ερωτήσεων για αυτό το λεπτό. Δοκιμάστε ξανά σε ένα λεπτό.';
+      }
       if (r.status === 401 || r.status === 403 || /api key/i.test(j.error?.message || '')) return 'Ο εγκέφαλος δεν δέχεται το κλειδί. Πείτε «ρύθμισε τον εγκέφαλο» για να το βάλουμε ξανά.';
       return `Ο εγκέφαλος δεν απάντησε αυτή τη στιγμή (κωδικός ${r.status || 'χρόνου'}). Δοκιμάστε ξανά σε λίγο.`;
     }
