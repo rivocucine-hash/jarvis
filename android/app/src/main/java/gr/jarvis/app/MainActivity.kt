@@ -623,6 +623,14 @@ class MainActivity : Activity() {
                 // Η προεπιλεγμένη εφαρμογή μηνυμάτων του κινητού, στη λίστα συζητήσεων.
                 return try { val i = Intent.makeMainSelectorActivity(Intent.ACTION_MAIN, Intent.CATEGORY_APP_MESSAGING); main.post { try { startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (_: Exception) {} }; "ok" } catch (_: Exception) { "error" }
             }
+            if (which == "instagram_inbox") {
+                // Κατευθείαν στα μηνύματα (direct inbox) της εφαρμογής Instagram· αν δεν δεχτεί τον σύνδεσμο, η εφαρμογή απλά.
+                val dm = Intent(Intent.ACTION_VIEW, Uri.parse("instagram://direct-inbox")).setPackage("com.instagram.android")
+                val i = if (dm.resolveActivity(packageManager) != null) dm else packageManager.getLaunchIntentForPackage("com.instagram.android")
+                if (i == null) { note("openApp instagram missing"); return "missing" }
+                main.post { try { startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); note("openApp instagram ok dm=${i === dm}") } catch (e: Exception) { note("openApp instagram fail " + e.javaClass.simpleName) } }
+                return "ok"
+            }
             val pkgs = when (which) {
                 "whatsapp" -> listOf("com.whatsapp", "com.whatsapp.w4b")
                 "viber" -> listOf("com.viber.voip")

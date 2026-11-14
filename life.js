@@ -589,7 +589,7 @@ const L = [
   { re: /(ποιοσ γεννηθηκε σημερα|ποιοι γεννηθηκαν σημερα|διασημοι γενεθλια σημερα)/, run: async () => { const w = await wikiDay(); if (!w || !w.births.length) return 'Δεν βρήκα πληροφορίες.'; const b = [...w.births].filter((l) => +l.match(/^\d+/)[0] >= 1850).sort(() => Math.random() - 0.5).slice(0, 3); return 'Σαν σήμερα γεννήθηκαν: ' + b.map((l) => l.replace(/^(\d+)\s*[-–]\s*/, 'το $1, ')).join('. ') + '.'; } },
 
   // Instagram
-  { re: /(ανοιξε|δειξε|παμε).*(μ[ηυι]ν[ηυι]ματα|inbox|dm|ντιεμ|εισερχομενα).*(instagram|ινστ)|(ανοιξε|δειξε|παμε).*(instagram|ινστ).*(μ[ηυι]ν[ηυι]ματα|inbox|dm|εισερχομενα)/, run: () => { setTimeout(() => openUrl(IG_INBOX), 900); return 'Ανοίγω κατευθείαν τα μηνύματα του Instagram. Μην κοιτάξετε τα stories!'; } },
+  { re: /(ανοιξε|δειξε|παμε).*(μ[ηυι]ν[ηυι]ματα|inbox|dm|ντιεμ|εισερχομενα).*(instagram|ινστ)|(ανοιξε|δειξε|παμε).*(instagram|ινστ).*(μ[ηυι]ν[ηυι]ματα|inbox|dm|εισερχομενα)/, run: () => { setTimeout(openIgInbox, 900); return 'Ανοίγω κατευθείαν τα μηνύματα του Instagram. Μην κοιτάξετε τα stories!'; } },
   { re: /(instagram|ινσταγκραμ|ινστα|social)/, test: (n) => /(μηνυμα|μηνυματα|dm|ντιεμ|γραφουν|εγραψαν|stories|στοριζ|στορυ|αποφυγ)/.test(n), run: () => instagramHelp() },
 ];
 intents.unshift(...L);
@@ -598,10 +598,19 @@ SITES.instagram = SITES['ινσταγκραμ'] = SITES['ινσταγραμ'] = 
    Πρώτα δοκιμάζουμε τον δικό της σύνδεσμο (instagram://direct-inbox)· αν η εφαρμογή δεν ανοίξει σε 1,8″, ο σύνδεσμος ιστού. */
 const baseOpenUrlIG = openUrl;
 function openIgInbox() {
+  // Εφαρμογή v27+: το κινητό ανοίγει απευθείας τα μηνύματα του Instagram. Παλιότερη έκδοση απαντά "unknown".
+  const A2 = window.AndroidJarvis;
+  if (A2 && A2.openApp) {
+    let r = ''; try { r = A2.openApp('instagram_inbox'); } catch {}
+    if (r === 'ok') return;
+    if (r === 'missing') { try { location.href = IG_INBOX; } catch {} return; }
+  }
+  // Στην εφαρμογή ο σύνδεσμος πάει απευθείας στη σελίδα (όχι με κλικ, που μπορεί να αγνοηθεί χωρίς άγγιγμα).
+  const go = A2 ? (u) => { try { location.href = u; } catch {} } : baseOpenUrlIG;
   let left = false; const onHide = () => { if (document.hidden) left = true; };
   document.addEventListener('visibilitychange', onHide);
-  try { baseOpenUrlIG('instagram://direct-inbox'); } catch {}
-  setTimeout(() => { document.removeEventListener('visibilitychange', onHide); if (!left && !document.hidden) baseOpenUrlIG(IG_INBOX); }, 1800);
+  try { go('instagram://direct-inbox'); } catch {}
+  setTimeout(() => { document.removeEventListener('visibilitychange', onHide); if (!left && !document.hidden) go(IG_INBOX); }, 1800);
 }
 openUrl = function (u) { return u === IG_INBOX ? openIgInbox() : baseOpenUrlIG(u); };
 /* «Instagram», «WhatsApp», «Viber», «Messenger» (σκέτο ή «άνοιξε τα μηνύματα του …»): ανοίγει την εφαρμογή στις συζητήσεις. */
