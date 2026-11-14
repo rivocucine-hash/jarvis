@@ -291,6 +291,7 @@ class MainActivity : Activity() {
         super.onResume()
         visible = true
         if (crashScreen) return
+        try { Health.start(this) } catch (_: Throwable) {}
         if (hasMic()) { if (wakeEnabled() && wakeProven()) startWake(); askNextSpecialPermission() }
     }
 
@@ -308,6 +309,7 @@ class MainActivity : Activity() {
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (crashScreen) return
+        try { Health.start(this) } catch (_: Throwable) {}
         if (hasMic() && wakeEnabled() && wakeProven()) startWake()
         askNextSpecialPermission()
     }
@@ -572,6 +574,10 @@ class MainActivity : Activity() {
             main.post { openContact(kind, pick.second, body) }
             return out.put("status", "ok").toString()
         }
+        /** Βήματα και ύπνος: τα δείγματα των αισθητήρων (μένουν στο κινητό). */
+        @JavascriptInterface fun healthLog(): String = Health.read(this@MainActivity)
+        @JavascriptInterface fun healthInfo(): String = JSONObject().put("sensor", Health.hasSensor(this@MainActivity)).put("perm", Health.hasPerm(this@MainActivity)).toString()
+        @JavascriptInterface fun askSteps() { main.post { try { if (Build.VERSION.SDK_INT >= 29) requestPermissions(arrayOf(Manifest.permission.ACTIVITY_RECOGNITION), REQ_PERMS) else Health.start(this@MainActivity) } catch (_: Throwable) {} } }
         @JavascriptInterface fun askCalendar() { main.post { try { requestPermissions(arrayOf(Manifest.permission.READ_CALENDAR), REQ_PERMS) } catch (_: Throwable) {} } }
         @JavascriptInterface fun copyText(text: String) {
             main.post {

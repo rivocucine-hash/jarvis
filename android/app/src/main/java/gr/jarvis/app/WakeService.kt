@@ -102,6 +102,7 @@ class WakeService : Service(), RecognitionListener {
         try { logFile(this).delete() } catch (_: Throwable) {}
         log("0 διεργασία ακρόασης ξεκίνησε · Android " + Build.VERSION.RELEASE + " (SDK " + Build.VERSION.SDK_INT + ") · " + Build.MANUFACTURER + " " + Build.MODEL + " · " + Build.SUPPORTED_ABIS.joinToString())
         try { ensureChannels(this) } catch (e: Throwable) { logError("channels", e) }
+        try { Health.start(this) } catch (e: Throwable) { logError("health", e) }
         try {
             if (Build.VERSION.SDK_INT >= 29) startForeground(1, ongoing(), ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
             else startForeground(1, ongoing())
