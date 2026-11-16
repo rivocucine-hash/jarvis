@@ -81,6 +81,7 @@ class WakeService : Service(), RecognitionListener {
     private var initStarted = false
     private var foreground = false
     private var lastWake = 0L
+    private var lastHeardLog = 0L
 
     override fun onBind(intent: Intent?): IBinder = Binder()
 
@@ -269,12 +270,15 @@ class WakeService : Service(), RecognitionListener {
         // Αυστηρός έλεγχος: μόνο η λέξη «jarvis» (μόνη της ή μετά από «hey»), και με υψηλή βεβαιότητα.
         // Μετά το «jarvis» επιτρέπονται λέξεις (π.χ. «Τζάρβις σταμάτα» μονορούφι)· πριν από αυτό μόνο το «hey».
         val at = words.indexOf("jarvis")
+        // Για διάγνωση: τι άκουσε (π.χ. «travis» αντί για «jarvis»), έως μία γραμμή ανά 3″.
+        if (at < 0 && words.isNotEmpty() && words.size <= 4) { val now = SystemClock.elapsedRealtime(); if (now - lastHeardLog > 3000) { lastHeardLog = now; log("άκουσε: " + words.joinToString(" ")) } }
         if (at < 0 || at > 1 || (at == 1 && words[0] != "hey")) return
         val arr = json.optJSONArray("result")
         if (arr != null) {
             var conf = 0.0
             for (i in 0 until arr.length()) { val o = arr.optJSONObject(i) ?: continue; if (o.optString("word") == "jarvis") conf = maxOf(conf, o.optDouble("conf", 0.0)) }
-            if (conf < (if (sessionMode) 0.6 else 0.85)) { log("αγνοήθηκε «jarvis» με βεβαιότητα " + String.format(java.util.Locale.US, "%.2f", conf)); return }
+            // Η ελληνική προφορά του «Τζάρβις» βγάζει χαμηλότερη βεβαιότητα (π.χ. 0.73 απορρίφθηκε με όριο 0.85).
+            if (conf < (if (sessionMode) 0.55 else 0.6)) { log("αγνοήθηκε «jarvis» με βεβαιότητα " + String.format(java.util.Locale.US, "%.2f", conf)); return }
         }
         fire()
     }
