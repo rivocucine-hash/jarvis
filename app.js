@@ -409,7 +409,7 @@ async function askAI(text) {
     if (o) aiHistory.push({ role: 'model', parts: [{ text: o }] }); else aiHistory.pop();
     return o;
   }
-  const sys = `Είσαι ο ${S.assistant}, ένας εξαιρετικά ευφυής, ευγενικός και διακριτικά σαρκαστικός προσωπικός βοηθός τεχνητής νοημοσύνης, με ύφος Βρετανού μπάτλερ από το μέλλον. Μιλάς πάντα ελληνικά, στον πληθυντικό ευγενείας, και αποκαλείς τον χρήστη «${addressAs()}». Απαντάς ΑΜΕΣΑ και ΣΥΓΚΕΚΡΙΜΕΝΑ σε αυτό που ζητήθηκε: πρώτα η απάντηση, χωρίς εισαγωγές, χωρίς «ως ΤΝ δεν μπορώ». Αν σου ζητηθεί κείμενο (ποίημα, email, μήνυμα, ιδέες), το γράφεις ολόκληρο. Αν κάτι είναι ασαφές, κάνεις μία σύντομη διευκρινιστική ερώτηση. ${S.userName ? 'Ο χρήστης λέγεται ' + S.userName + '.' : ''} Οι απαντήσεις σου είναι σύντομες (1-3 προτάσεις) για απλές ερωτήσεις, και όσο χρειάζεται όταν ζητηθεί κείμενο, γιατί διαβάζονται φωναχτά. Μη χρησιμοποιείς markdown, λίστες ή emoji. Σημερινή ημερομηνία και ώρα: ${new Date().toLocaleString('el-GR')}.${window.aiContext ? aiContext() : ''}${window.aiCommands ? aiCommands() : ''}`;
+  const sys = `Είσαι ο ${S.assistant}, ένας εξαιρετικά ευφυής, ευγενικός και διακριτικά σαρκαστικός προσωπικός βοηθός τεχνητής νοημοσύνης, με ύφος Βρετανού μπάτλερ από το μέλλον. Μιλάς πάντα ελληνικά, στον πληθυντικό ευγενείας, και αποκαλείς τον χρήστη «${addressAs()}». Απαντάς ΑΜΕΣΑ και ΣΥΓΚΕΚΡΙΜΕΝΑ σε αυτό που ζητήθηκε: πρώτα η απάντηση, χωρίς εισαγωγές, χωρίς «ως ΤΝ δεν μπορώ». Μη λες ποτέ ότι χρειάζεσαι αναβάθμιση ή ότι δεν μπορείς να μπεις στο ίντερνετ. Αν σου ζητηθεί κείμενο (ποίημα, email, μήνυμα, ιδέες), το γράφεις ολόκληρο. Αν κάτι είναι ασαφές, κάνεις μία σύντομη διευκρινιστική ερώτηση. ${S.userName ? 'Ο χρήστης λέγεται ' + S.userName + '.' : ''} Οι απαντήσεις σου είναι σύντομες (1-3 προτάσεις) για απλές ερωτήσεις, και όσο χρειάζεται όταν ζητηθεί κείμενο, γιατί διαβάζονται φωναχτά. Μη χρησιμοποιείς markdown, λίστες ή emoji. Σημερινή ημερομηνία και ώρα: ${new Date().toLocaleString('el-GR')}.${window.aiContext ? aiContext() : ''}${window.aiCommands ? aiCommands() : ''}`;
   aiHistory.push({ role: 'user', parts: [{ text }] }); while (aiHistory.length > 16) aiHistory.shift();
   try {
     const prov = S.aiProvider || 'gemini';
@@ -425,10 +425,10 @@ async function askAI(text) {
     const nt = norm(text);
     const hardQ = /(γραψε|συνταξε|εξηγησε|αναλυσε|αναλυτικα|λεπτομερ|ποιημα|ιστορια για|email|μειλ|γραμμα|συγκρινε|σχεδιο|μεταφρασε|περιληψη|συμβουλη για|τι να κανω με)/.test(nt) || nt.split(' ').length > 25;
     const tryGroq = async () => { const g = await askGroq(sys, aiHistory); if (g.text) { aiHistory.push({ role: 'model', parts: [{ text: g.text }] }); return g.text; } return null; };
-    const wantSearch0 = /(ψαξε|βρεσ μου|βρεσ |αναζητησ|τελευταια νεα|ειδησεισ για|τιμη |ποσο κανει|ποσο κοστιζει|ποτε παιζει|αποτελεσμα|σκορ|ποιοσ κερδισε|ωραριο|ειναι ανοιχτ|στο ιντερνετ|στο google)/.test(nt);
+    const wantSearch0 = /(ψαξε|βρεσ μου|βρεσ |αναζητησ|τελευταια νεα|ειδησεισ για|τιμη |ποσο κανει|ποσο κοστιζει|ποτε παιζει|αποτελεσμα|σκορ|ποιοσ κερδισε|ωραριο|ειναι ανοιχτ|στο ιντερνετ|google|γκουγκλ|γκουγκ|overview|οβερβιου|οβερβιου|ai οβερ|μπεσ στο|κοιτα στο|τι λεει το ιντερνετ)/.test(nt);
     let groqTried = false;
     if (S.groqKey && (!S.geminiKey || (!hardQ && !wantSearch0))) { groqTried = true; const o = await tryGroq(); if (o) return o; if (!S.geminiKey) { aiHistory.pop(); return 'Ο γρήγορος εγκέφαλος δεν απάντησε. Πείτε «δοκίμασε το Groq» για να ελέγξω το κλειδί.'; } }
-    const wantSearch = S.webSearch !== false && navigator.onLine && /(ψαξε|βρεσ μου|βρεσ |αναζητησ|τελευταια νεα|ειδησεισ για|τιμη |ποσο κανει|ποσο κοστιζει|ποτε παιζει|αποτελεσμα|σκορ|ποιοσ κερδισε|προτεινε μου|ωραριο|ειναι ανοιχτ|στο ιντερνετ|στο google)/.test(norm(text));
+    const wantSearch = S.webSearch !== false && navigator.onLine && /(ψαξε|βρεσ μου|βρεσ |αναζητησ|τελευταια νεα|ειδησεισ για|τιμη |ποσο κανει|ποσο κοστιζει|ποτε παιζει|αποτελεσμα|σκορ|ποιοσ κερδισε|προτεινε μου|ωραριο|ειναι ανοιχτ|στο ιντερνετ|google|γκουγκλ|γκουγκ|overview|οβερβιου|ai οβερ|μπεσ στο|κοιτα στο|τι λεει το ιντερνετ)/.test(norm(text));
     // Κάθε μοντέλο Gemini έχει δικό του δωρεάν όριο. Όταν ένα εξαντλείται (429), περνάμε στο επόμενο και το θυμόμαστε μέχρι να ξαναγεμίσει.
     const mainModel = S.model || defaults.model;
     const models = [...new Set([mainModel, 'gemini-flash-lite-latest', 'gemini-2.5-flash-lite', 'gemini-2.0-flash', 'gemini-2.0-flash-lite'])];
@@ -845,6 +845,24 @@ function init() {
   if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 init();
+
+/* Αναζήτηση στο Google: αν ο εγκέφαλος δεν έφερε απάντηση από το Google (όριο, χωρίς κλειδί Gemini, ή είπε «δεν μπορώ»),
+   ανοίγουμε την αναζήτηση στο Google του κινητού, όπου φαίνεται και η περίληψη AI (AI Overview). */
+{
+  const baseAskAIg = askAI;
+  const SEARCHY = /(google|γκουγκλ|γκουγκ|overview|οβερβιου|ai οβερ|ψαξε|μπεσ στο|κοιτα στο|στο ιντερνετ)/;
+  const REFUSED = /(δεν μπορω|δεν μπορεσα|αναβαθμ|δεν εχω (προσβαση|δυνατοτητα)|δεν εχω προσβαση|δεν ειναι δυνατ)/;
+  const searchQuery = (t) => t.replace(/(τζ?αρβισ|jarvis)[,]?\s*/i, '').replace(/(μπ(ες|είτε) στο|ψάξε( μου)?( στο)?|κοίτα στο|άνοιξε το|στο)?\s*(google|γκούγκλ\w*|γκουγκλ\w*)\s*(και)?/gi, ' ')
+    .replace(/(διάβασέ? μου|διάβασε|πες μου)?\s*(το|την)?\s*(ai|έι άι|εϊ άι)?\s*(overview|όβερβιου|οβερβιου)\s*(για|σχετικά με)?/gi, ' ').replace(/\s+/g, ' ').trim();
+  askAI = async function (text) {
+    const o = await baseAskAIg(text);
+    if (!SEARCHY.test(norm(text)) || (o && !REFUSED.test(norm(o)))) return o;
+    const q = searchQuery(text);
+    if (!q || q.split(' ').length < 1) return o;
+    try { openUrl('https://www.google.com/search?q=' + encodeURIComponent(q)); } catch {}
+    return `Δεν πήρα απάντηση από το Google αυτή τη στιγμή, οπότε σας άνοιξα την αναζήτηση για «${q}». Εκεί, πάνω πάνω, είναι η περίληψη AI.`;
+  };
+}
 
 /* Φωτογραφία κύριας οθόνης: το πορτοκαλί μάτι του ρομπότ (27.6% πλάτους, 16.9% ύψους της φωτογραφίας) πέφτει στο κέντρο του αντιδραστήρα. */
 (function hudPhoto() {
