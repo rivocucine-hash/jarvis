@@ -158,6 +158,7 @@ class MainActivity : Activity() {
         } } catch (e: Throwable) { CrashLog.note(this, "TextToSpeech", e) }
 
         pendingWake = intent?.getBooleanExtra("wake", false) == true
+        sharedText = sharedFrom(intent)
         t0 = android.os.SystemClock.elapsedRealtime()
         // Πάντα η πιο πρόσφατη έκδοση της σελίδας: σβήνεται η προσωρινή μνήμη του WebView (όχι τα δεδομένα του χρήστη).
         try { web.clearCache(true) } catch (_: Throwable) {}
@@ -278,6 +279,7 @@ class MainActivity : Activity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent); setIntent(intent)
+        sharedFrom(intent)?.let { s -> sharedText = s; js("window.__nativeShared && __nativeShared()"); return }
         if (intent.getBooleanExtra("morning", false)) {
             try { (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(MorningAlarm.NOTIF_ID) } catch (_: Throwable) {}
             js("window.__nativeMorning && __nativeMorning()"); return
@@ -309,6 +311,7 @@ class MainActivity : Activity() {
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (crashScreen) return
+        if (locPending) { if (hasLocation()) fetchLocation() else sendLoc(null, "denied") }
         try { Health.start(this) } catch (_: Throwable) {}
         if (hasMic() && wakeEnabled() && wakeProven()) startWake()
         askNextSpecialPermission()
@@ -322,6 +325,34 @@ class MainActivity : Activity() {
     private val wakeConn = object : android.content.ServiceConnection {
         override fun onServiceConnected(name: android.content.ComponentName?, service: android.os.IBinder?) { wakeConnected = true; js("window.__nativeWakeState && __nativeWakeState('up')") }
         override fun onServiceDisconnected(name: android.content.ComponentName?) { wakeConnected = false; js("window.__nativeWakeState && __nativeWakeState('died')") }
+    }
+
+    /* ---------------- Κοινοποίηση σελίδας/κειμένου στο JARVIS ---------------- */
+    @Volatile private var sharedText: String? = null
+    private fun sharedFrom(i: Intent?): String? =
+        if (i?.action == Intent.ACTION_SEND && i.type?.startsWith("text/") == true) i.getStringExtra(Intent.EXTRA_TEXT)?.take(20000)?.ifBlank { null } else null
+
+    /* ---------------- Τοποθεσία (για «θυμήσου πού πάρκαρα»): μόνο όταν ζητηθεί, αποτέλεσμα στη σελίδα ---------------- */
+    private var locPending = false
+    private fun hasLocation() = checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED || checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+    private fun sendLoc(l: android.location.Location?, why: String = "") {
+        locPending = false
+        if (l == null) js("window.__nativeLocation && __nativeLocation(null, null, 0, ${q(why)})")
+        else js("window.__nativeLocation && __nativeLocation(${l.latitude}, ${l.longitude}, ${l.accuracy}, '')")
+    }
+    @Suppress("MissingPermission")
+    private fun fetchLocation() {
+        if (!hasLocation()) { locPending = true; requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION), REQ_PERMS); return }
+        val lm = getSystemService(Context.LOCATION_SERVICE) as android.location.LocationManager
+        val providers = listOf(android.location.LocationManager.GPS_PROVIDER, android.location.LocationManager.NETWORK_PROVIDER).filter { try { lm.isProviderEnabled(it) } catch (_: Throwable) { false } }
+        if (providers.isEmpty()) { sendLoc(null, "off"); return }
+        var done = false
+        val finish = { l: android.location.Location? -> if (!done) { done = true; sendLoc(l ?: providers.mapNotNull { p -> try { lm.getLastKnownLocation(p) } catch (_: Throwable) { null } }.maxByOrNull { it.time }, "none") } }
+        main.postDelayed({ finish(null) }, 15000)
+        try {
+            if (Build.VERSION.SDK_INT >= 30) providers.forEach { p -> lm.getCurrentLocation(p, null, mainExecutor) { l -> if (l != null) finish(l) } }
+            else @Suppress("DEPRECATION") providers.forEach { p -> lm.requestSingleUpdate(p, { l -> finish(l) }, Looper.getMainLooper()) }
+        } catch (e: Throwable) { note("location " + e); finish(null) }
     }
 
     /* ---------------- Διερμηνέας & εύρεση κινητού ---------------- */
@@ -557,6 +588,9 @@ class MainActivity : Activity() {
         @JavascriptInterface fun langAvailable(tag: String): Int = try { tts?.isLanguageAvailable(Locale.forLanguageTag(tag)) ?: -9 } catch (_: Throwable) { -9 }
 
         /* «Τζάρβις, πού είσαι;»: δυνατό κουδούνισμα ξυπνητηριού (ακούγεται και στο αθόρυβο) και δόνηση, έως 30″ ή μέχρι «σταμάτα». */
+        @JavascriptInterface fun getLocation() { main.post { fetchLocation() } }
+        /** Ό,τι κοινοποιήθηκε στο JARVIS (σελίδα/κείμενο), μία φορά. */
+        @JavascriptInterface fun takeShared(): String { val s = sharedText ?: ""; sharedText = null; return s }
         @JavascriptInterface fun findPhone() { main.post { startFind() } }
         @JavascriptInterface fun stopFind() { main.post { stopFindNow() } }
 
