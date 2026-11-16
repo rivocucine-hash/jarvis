@@ -513,6 +513,8 @@ class MainActivity : Activity() {
         /** Όσο μιλάει ο βοηθός: ακούει αν ο χρήστης μιλήσει από πάνω του. sensitivity 1 (λίγο) έως 3 (πολύ). */
         @JavascriptInterface fun bargeStart(sensitivity: Int) { if (!hasMic() || listeningNative) return; barge.start(when (sensitivity) { 3 -> 1.5; 1 -> 2.6; else -> 1.9 }) }
         @JavascriptInterface fun bargeStop() { barge.stop() }
+        /** «Τζάρβις shut down»: η εφαρμογή φεύγει από την οθόνη, η ακρόαση «Τζάρβις» μένει ανοιχτή. */
+        @JavascriptInterface fun minimize() { main.post { moveTaskToBack(true) } }
         /* ---------- Επαφές του κινητού: κλήση ή SMS με το όνομα. Ο αριθμός δεν επιστρέφεται στη σελίδα· η κλήση/αποστολή γίνεται μόνο αφού πατήσει ο χρήστης. ---------- */
         private fun plainName(s: String): String = java.text.Normalizer.normalize(s.lowercase(), java.text.Normalizer.Form.NFD).replace(Regex("[^a-zα-ω0-9 ]"), "").replace('ς', 'σ').trim()
         private fun findContacts(query: String): List<Pair<String, String>> {
