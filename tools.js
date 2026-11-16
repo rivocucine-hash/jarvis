@@ -51,6 +51,62 @@
     { re: /(ξεχασε που παρκαρα|σβησε το παρκινγκ|βρηκα το (αυτοκινητο|αμαξι))/, run: () => { Store.set('parking', null); return 'Εντάξει, ξέχασα τη θέση του αυτοκινήτου.'; } },
   );
 
+  /* ---------- «Τζάρβις, τι βλέπεις;»: φωτογραφία από την κάμερα → Gemini (ή Groq) → απάντηση φωναχτά (εφαρμογή v40+) ---------- */
+  const Vision = { img: null, at: 0 };
+  let photoWait = null;
+  window.__nativePhoto = (b64) => { const f = photoWait; photoWait = null; if (f) f(b64 || ''); };
+  const takePhoto = () => new Promise((res) => { photoWait = res; AJ.takePhoto(); setTimeout(() => { if (photoWait) { photoWait = null; res(''); } }, 180000); });
+  const VSYS = 'Είσαι ο JARVIS και βλέπεις μια φωτογραφία από την κάμερα του κινητού του χρήστη. Απάντησε στα ελληνικά, στον πληθυντικό ευγενείας, σύντομα (2-5 προτάσεις) γιατί η απάντηση διαβάζεται φωναχτά, χωρίς markdown, λίστες ή emoji. Αν υπάρχει κείμενο σε ξένη γλώσσα (μενού, πινακίδα, ετικέτα), μετάφρασέ το στα ελληνικά. Αν ζητηθεί ανάγνωση, διάβασε το κείμενο όπως είναι.';
+  async function askVision(question, b64) {
+    const q = question || 'Τι βλέπεις στη φωτογραφία;';
+    if (S.geminiKey) {
+      for (const m of [...new Set([S.model || 'gemini-flash-latest', 'gemini-2.5-flash', 'gemini-flash-lite-latest', 'gemini-2.0-flash'])]) {
+        try {
+          const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(m)}:generateContent`, { method: 'POST', signal: AbortSignal.timeout ? AbortSignal.timeout(30000) : undefined, headers: { 'Content-Type': 'application/json', 'x-goog-api-key': S.geminiKey },
+            body: JSON.stringify({ system_instruction: { parts: [{ text: VSYS }] }, contents: [{ role: 'user', parts: [{ inline_data: { mime_type: 'image/jpeg', data: b64 } }, { text: q }] }], generationConfig: { temperature: 0.4, maxOutputTokens: 700 } }) });
+          const j = await r.json().catch(() => ({}));
+          const o = (j.candidates?.[0]?.content?.parts || []).map((p) => p.text || '').join('').trim();
+          if (r.ok && o) return o;
+          if (r.status === 401 || r.status === 403) break;
+        } catch {}
+      }
+    }
+    if (S.groqKey) {
+      try {
+        const r = await fetch('https://api.groq.com/openai/v1/chat/completions', { method: 'POST', signal: AbortSignal.timeout ? AbortSignal.timeout(30000) : undefined, headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + S.groqKey },
+          body: JSON.stringify({ model: 'meta-llama/llama-4-scout-17b-16e-instruct', temperature: 0.4, max_tokens: 700, messages: [{ role: 'system', content: VSYS }, { role: 'user', content: [{ type: 'text', text: q }, { type: 'image_url', image_url: { url: 'data:image/jpeg;base64,' + b64 } }] }] }) });
+        const j = await r.json().catch(() => ({})); const o = (j.choices?.[0]?.message?.content || '').trim();
+        if (r.ok && o) return o;
+      } catch {}
+    }
+    return null;
+  }
+  async function lookAt(raw) {
+    if (!AJ || !AJ.takePhoto) return 'Για να βλέπω με την κάμερα, χρειάζεται η νεότερη εφαρμογή. Εγκαταστήστε τη και ξαναδοκιμάστε.';
+    if (!S.geminiKey && !S.groqKey) return 'Για να καταλαβαίνω φωτογραφίες χρειάζομαι εγκέφαλο. Πείτε «ρύθμισε τον εγκέφαλο».';
+    toast('ΚΑΜΕΡΑ', 'Βγάλτε φωτογραφία και πατήστε ✓.', 5000);
+    const b64 = await takePhoto();
+    if (!b64) return 'Δεν βγήκε φωτογραφία.';
+    addMsg('ai', '', { html: `<img src="data:image/jpeg;base64,${b64}" alt="φωτογραφία" style="max-width:100%;max-height:260px;display:block;border:1px solid var(--line)">` });
+    toast('ΚΑΜΕΡΑ', 'Κοιτάζω τη φωτογραφία…', 6000);
+    // Η ερώτηση χωρίς τις λέξεις της εντολής· αν μείνει μόνο «τι βλέπεις», γενική περιγραφή.
+    const q = raw.replace(/^(τζ?άρβις|jarvis)[,]?\s*/i, '').trim();
+    const o = await askVision(q, b64);
+    if (!o) return 'Δεν μπόρεσα να δω τη φωτογραφία αυτή τη στιγμή. Ελέγξτε το ίντερνετ και ξαναδοκιμάστε.';
+    Vision.img = b64; Vision.at = Date.now();
+    return o;
+  }
+  // Ερωτήσεις συνέχειας για την ίδια φωτογραφία (έως 3 λεπτά μετά): «πόσο κάνει το δεύτερο πιάτο;».
+  const baseAskAIv = askAI;
+  askAI = async function (text) {
+    if (Vision.img && Date.now() - Vision.at < 180000) { const o = await askVision(text, Vision.img); if (o) { Vision.at = Date.now(); return o; } }
+    return baseAskAIv(text);
+  };
+  intents.unshift(
+    { re: /(τι βλεπεισ|κοιτα (αυτο|εδω)|κοιταξε (αυτο|εδω)|βγαλε (μια )?φωτογραφια|ανοιξε την καμερα|τι ειναι αυτο που κραταω|διαβασε μου (αυτο το χαρτι|αυτη την ετικετα|αυτο εδω|αυτο)$|μεταφρασε (μου )?(αυτη την |αυτο το |το |την )?(πινακιδα|μενου|ταμπελα|ετικετα|χαρτι|σημα)|τι γραφει (αυτο|εδω|η πινακιδα|το μενου|η ετικετα))/, run: (raw) => lookAt(raw) },
+    { re: /(ξεχασε τη φωτογραφια|τελοσ φωτογραφιασ)/, run: () => { Vision.img = null; return 'Εντάξει.'; } },
+  );
+
   /* ---------- Ανάγνωση σελίδας/κειμένου που κοινοποιήθηκε στο JARVIS (εφαρμογή v39+) ---------- */
   let shared = null; // { title, text, url }
   const URL_RE = /https?:\/\/\S+/i;

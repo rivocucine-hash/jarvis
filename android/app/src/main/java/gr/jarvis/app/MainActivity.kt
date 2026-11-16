@@ -51,6 +51,7 @@ class MainActivity : Activity() {
         /** Αληθές όσο η εφαρμογή είναι μπροστά στον χρήστη. */
         @Volatile var visible = false
         const val REQ_FILE = 11
+        const val REQ_PHOTO = 12
         @Volatile var listeningNative = false
     }
 
@@ -306,6 +307,10 @@ class MainActivity : Activity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == REQ_FILE) { fileCallback?.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(resultCode, data)); fileCallback = null }
+        if (requestCode == REQ_PHOTO) {
+            if (resultCode != Activity.RESULT_OK) { js("window.__nativePhoto && __nativePhoto('')"); return }
+            Thread({ val b64 = photoBase64(); js("window.__nativePhoto && __nativePhoto(${q(b64)})") }, "photo").start()
+        }
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
@@ -353,6 +358,34 @@ class MainActivity : Activity() {
             if (Build.VERSION.SDK_INT >= 30) providers.forEach { p -> lm.getCurrentLocation(p, null, mainExecutor) { l -> if (l != null) finish(l) } }
             else @Suppress("DEPRECATION") providers.forEach { p -> lm.requestSingleUpdate(p, { l -> finish(l) }, Looper.getMainLooper()) }
         } catch (e: Throwable) { note("location " + e); finish(null) }
+    }
+
+    /* ---------------- Κάμερα («Τζάρβις, τι βλέπεις;») ---------------- */
+    private fun startPhoto() {
+        try {
+            val f = PhotoProvider.file(cacheDir); f.delete()
+            val i = Intent(MediaStore.ACTION_IMAGE_CAPTURE).putExtra(MediaStore.EXTRA_OUTPUT, PhotoProvider.URI)
+                .addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            i.clipData = android.content.ClipData.newRawUri("photo", PhotoProvider.URI)
+            startActivityForResult(i, REQ_PHOTO)
+        } catch (e: Throwable) { note("photo " + e); js("window.__nativePhoto && __nativePhoto('')") }
+    }
+    /** Φωτογραφία σε JPEG έως 1280px (σωστά γυρισμένη), ως base64. Το προσωρινό αρχείο σβήνεται. */
+    private fun photoBase64(): String {
+        val f = PhotoProvider.file(cacheDir)
+        return try {
+            if (!f.exists() || f.length() == 0L) return ""
+            val o = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            android.graphics.BitmapFactory.decodeFile(f.absolutePath, o)
+            var s = 1; while (maxOf(o.outWidth, o.outHeight) / (s * 2) >= 1280) s *= 2
+            var bmp = android.graphics.BitmapFactory.decodeFile(f.absolutePath, android.graphics.BitmapFactory.Options().apply { inSampleSize = s }) ?: return ""
+            val rot = when (android.media.ExifInterface(f.absolutePath).getAttributeInt(android.media.ExifInterface.TAG_ORIENTATION, 1)) { 6 -> 90f; 3 -> 180f; 8 -> 270f; else -> 0f }
+            val k = 1280f / maxOf(bmp.width, bmp.height)
+            val m = android.graphics.Matrix().apply { if (k < 1f) postScale(k, k); if (rot != 0f) postRotate(rot) }
+            if (k < 1f || rot != 0f) bmp = android.graphics.Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, m, true)
+            val out = java.io.ByteArrayOutputStream(); bmp.compress(android.graphics.Bitmap.CompressFormat.JPEG, 82, out)
+            android.util.Base64.encodeToString(out.toByteArray(), android.util.Base64.NO_WRAP)
+        } catch (e: Throwable) { note("photo decode " + e); "" } finally { try { f.delete() } catch (_: Throwable) {} }
     }
 
     /* ---------------- Διερμηνέας & εύρεση κινητού ---------------- */
@@ -589,6 +622,7 @@ class MainActivity : Activity() {
 
         /* «Τζάρβις, πού είσαι;»: δυνατό κουδούνισμα ξυπνητηριού (ακούγεται και στο αθόρυβο) και δόνηση, έως 30″ ή μέχρι «σταμάτα». */
         @JavascriptInterface fun getLocation() { main.post { fetchLocation() } }
+        @JavascriptInterface fun takePhoto() { main.post { startPhoto() } }
         /** Ό,τι κοινοποιήθηκε στο JARVIS (σελίδα/κείμενο), μία φορά. */
         @JavascriptInterface fun takeShared(): String { val s = sharedText ?: ""; sharedText = null; return s }
         @JavascriptInterface fun findPhone() { main.post { startFind() } }

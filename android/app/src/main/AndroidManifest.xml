@@ -80,6 +80,12 @@
             </intent-filter>
         </receiver>
 
+        <provider
+            android:name=".PhotoProvider"
+            android:authorities="gr.jarvis.app.photo"
+            android:exported="false"
+            android:grantUriPermissions="true" />
+
         <service
             android:name=".WakeService"
             android:process=":wake"
