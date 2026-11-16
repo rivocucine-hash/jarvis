@@ -845,3 +845,25 @@ function init() {
   if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 init();
+
+/* Φωτογραφία κύριας οθόνης: το πορτοκαλί μάτι του ρομπότ (27.6% πλάτους, 16.9% ύψους της φωτογραφίας) πέφτει στο κέντρο του αντιδραστήρα. */
+(function hudPhoto() {
+  const el = document.getElementById('hudPhoto'), fade = el && el.querySelector('.hp-fade');
+  if (!el) return;
+  const EX = 0.2756, EY = 0.1694, AR = 1507 / 1000;
+  const place = () => {
+    const hud = document.getElementById('hud'), wrap = document.querySelector('.core-wrap');
+    if (!hud || hud.classList.contains('hidden') || !wrap) { el.classList.remove('on'); document.body.classList.remove('hud-photo'); return; }
+    const r = wrap.getBoundingClientRect(); if (!r.width) return;
+    const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    const H = innerHeight * 0.72, W = H * AR, x = cx - EX * W, y = cy - EY * H;
+    el.style.backgroundSize = `${W}px ${H}px`; el.style.backgroundPosition = `${x}px ${y}px`;
+    // Πάνω από τη φωτογραφία: σκούρο, για να διαβάζονται ρολόι και πλαίσια.
+    fade.style.height = `${Math.max(0, y) + 70}px`; fade.style.background = `linear-gradient(180deg,#02070d ${Math.max(0, y)}px,rgba(2,7,13,0) ${Math.max(0, y) + 70}px)`;
+    el.classList.add('on'); document.body.classList.add('hud-photo');
+  };
+  addEventListener('resize', place);
+  try { new ResizeObserver(place).observe(document.querySelector('.core-wrap')); } catch {}
+  try { new MutationObserver(place).observe(document.getElementById('hud'), { attributes: true, attributeFilter: ['class'] }); } catch {}
+  setTimeout(place, 300);
+})();
