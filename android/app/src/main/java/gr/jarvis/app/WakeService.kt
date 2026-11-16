@@ -126,7 +126,7 @@ class WakeService : Service(), RecognitionListener {
             ACTION_SESSION_ON -> { sessionMode = true; log("λειτουργία προγράμματος") }
             ACTION_SESSION_OFF -> { sessionMode = false }
             // stopSelf(startId): αν ήρθε ήδη νεότερο «ξεκίνα» (π.χ. κλείσε-άνοιξε από ρυθμίσεις), δεν κλείνει.
-            ACTION_STOP -> { log("τερματισμός κατόπιν αιτήματος"); stopSelf(startId); return START_NOT_STICKY }
+            ACTION_STOP -> { log("τερματισμός κατόπιν αιτήματος"); stopping = true; try { (getSystemService(Context.ALARM_SERVICE) as android.app.AlarmManager).cancel(restartIntent()) } catch (_: Throwable) {}; stopSelf(startId); return START_NOT_STICKY }
         }
         // Αν η υπηρεσία είχε κλείσει και ξαναξεκίνησε με οποιαδήποτε εντολή (π.χ. «συνέχισε»), φορτώνει ξανά και ακούει,
         // αντί να κλείνει πάλι αμέσως (αυτό άφηνε τον JARVIS κουφό μέχρι τη «Δοκιμή ακρόασης»).
@@ -137,12 +137,16 @@ class WakeService : Service(), RecognitionListener {
     }
 
     /** Σύρσιμο του JARVIS έξω από τις πρόσφατες: ζητάμε επανεκκίνηση σε 2″, για την περίπτωση που το κινητό σκοτώσει τη διεργασία. */
+    /** Μετά από «shut down» (εντολή τερματισμού) δεν ξαναξεκινάμε. */
+    @Volatile private var stopping = false
+    private fun restartIntent() = PendingIntent.getForegroundService(this, 7, Intent(this, WakeService::class.java).setAction(ACTION_START), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+
     override fun onTaskRemoved(rootIntent: Intent?) {
+        if (stopping) { super.onTaskRemoved(rootIntent); return }
         log("η εφαρμογή έκλεισε από τις πρόσφατες· η ακρόαση συνεχίζει")
         try {
-            val pi = PendingIntent.getForegroundService(this, 7, Intent(this, WakeService::class.java).setAction(ACTION_START), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
             val am = getSystemService(Context.ALARM_SERVICE) as android.app.AlarmManager
-            am.set(android.app.AlarmManager.ELAPSED_REALTIME_WAKEUP, SystemClock.elapsedRealtime() + 2000, pi)
+            am.set(android.app.AlarmManager.ELAPSED_REALTIME_WAKEUP, SystemClock.elapsedRealtime() + 2000, restartIntent())
         } catch (e: Throwable) { logError("επανεκκίνηση", e) }
         super.onTaskRemoved(rootIntent)
     }

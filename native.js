@@ -184,14 +184,16 @@ if (A) {
   const SESSION_STOP = /(σταματ|τελοσ|τερματισ|φτανει|αρκετα|κλεισ|stop|ακυρ|σωπα|σιωπη|ησυχια)/;
   // Ό,τι τρέχει: πρόγραμμα (γιόγκα, αναπνοές, διαλογισμός, γυμναστική, κρύο ντους, ρουτίνα), Pomodoro, μουσική/ήχοι ύπνου, πάρτι.
   const running = () => { const r = []; if (Session.active) r.push('το πρόγραμμα'); if (typeof Pomo !== 'undefined' && Pomo.t) r.push('το Pomodoro'); if (Music.n) r.push('τη μουσική'); if (typeof Party !== 'undefined' && Party.on) r.push('το πάρτι'); if (window.Radio && Radio.on) r.push('το ραδιόφωνο'); return r; };
-  // «Τζάρβις shut down» (ή «κλείσε την εφαρμογή»): σταματούν όλα και η εφαρμογή φεύγει από την οθόνη· η ακρόαση μένει, για το «Τζάρβις open».
+  // «Τζάρβις shut down» (ή «κλείσε την εφαρμογή»): σταματούν όλα και κλείνουν μικρόφωνο και εφαρμογή (εφαρμογή v36+).
+  // Ξανανοίγει από το εικονίδιο και τότε ακούει πάλι μόνη της. Σε παλιότερη εφαρμογή απλώς φεύγει από την οθόνη.
   const SHUTDOWN = /^(shut ?down|σατ ?νταουν|σαν ?νταουν|σατ ?ντον|shutdown|κλεισε την εφαρμογη|κλεισε τελειωσ|κλεισε το jarvis|κλεισε τον jarvis|κλεισε τον τζαρβισ|απενεργοποιησου|κλεισου)$/;
   const OPEN = /^(open|οπεν|ανοιξε|ανοιξου|ξυπνα|ξυπνησε)$/;
   const shutDown = async () => {
     try { if (Session.active) Session.stop(); } catch {} try { if (Pomo.t) Pomo.stop(true); } catch {} try { Music.stop(2); } catch {} try { if (Party.on) Party.stop(); } catch {} try { if (window.Radio) Radio.stop(); } catch {} try { closeAll(); } catch {}
     lastVoiceCmd = 0; followUp = 0;
-    await say('Τα λέμε, κύριε. Πείτε «Τζάρβις open» όταν με χρειαστείτε.', { noRelisten: true });
-    try { if (A.minimize) A.minimize(); } catch {}
+    const full = !!A.shutdown;
+    await say(full ? 'Τα λέμε, κύριε. Κλείνω και το μικρόφωνο. Ανοίξτε με από το εικονίδιο όταν με χρειαστείτε.' : 'Τα λέμε, κύριε. Πείτε «Τζάρβις open» όταν με χρειαστείτε.', { noRelisten: true });
+    try { if (full) { Wake.on = false; Banner.clear('wake'); A.shutdown(); } else if (A.minimize) A.minimize(); } catch {}
   };
   intents.unshift(
     { re: SHUTDOWN, run: () => { shutDown(); return { silent: true, text: '' }; } },

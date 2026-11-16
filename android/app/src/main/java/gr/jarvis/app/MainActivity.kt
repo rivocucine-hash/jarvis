@@ -515,6 +515,14 @@ class MainActivity : Activity() {
         @JavascriptInterface fun bargeStop() { barge.stop() }
         /** «Τζάρβις shut down»: η εφαρμογή φεύγει από την οθόνη, η ακρόαση «Τζάρβις» μένει ανοιχτή. */
         @JavascriptInterface fun minimize() { main.post { moveTaskToBack(true) } }
+        /** «Τζάρβις shut down»: κλείνουν μικρόφωνο και εφαρμογή. Η ρύθμιση ακρόασης δεν αλλάζει, ώστε με το επόμενο άνοιγμα από το εικονίδιο να ακούει ξανά. */
+        @JavascriptInterface fun shutdown() { main.post {
+            try { barge.stop() } catch (_: Throwable) {}
+            try { sr?.destroy() } catch (_: Throwable) {}; sr = null; listeningNative = false
+            WakeService.send(this@MainActivity, WakeService.ACTION_STOP)
+            // Λίγη αναμονή, ώστε η ακρόαση να έχει κλείσει πριν φύγει η εφαρμογή (αλλιώς θα ζητούσε επανεκκίνηση).
+            main.postDelayed({ finishAndRemoveTask() }, 700)
+        } }
         /* ---------- Επαφές του κινητού: κλήση ή SMS με το όνομα. Ο αριθμός δεν επιστρέφεται στη σελίδα· η κλήση/αποστολή γίνεται μόνο αφού πατήσει ο χρήστης. ---------- */
         private fun plainName(s: String): String = java.text.Normalizer.normalize(s.lowercase(), java.text.Normalizer.Form.NFD).replace(Regex("[^a-zα-ω0-9 ]"), "").replace('ς', 'σ').trim()
         private fun findContacts(query: String): List<Pair<String, String>> {
