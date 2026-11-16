@@ -104,7 +104,8 @@ class WakeService : Service(), RecognitionListener {
         super.onCreate()
         val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { t, e -> logError("uncaught, thread " + t.name, e); previous?.uncaughtException(t, e) }
-        try { logFile(this).delete() } catch (_: Throwable) {}
+        // Δεν σβήνουμε το παλιό αρχείο (μόνο αν μεγάλωσε), ώστε η αναφορά να δείχνει και τι έγινε πριν από το κλείσιμο.
+        try { val f = logFile(this); if (f.length() > 60000) f.delete() else if (f.exists()) f.appendText("\n----- νέα εκκίνηση -----\n") } catch (_: Throwable) {}
         log("0 διεργασία ακρόασης ξεκίνησε · Android " + Build.VERSION.RELEASE + " (SDK " + Build.VERSION.SDK_INT + ") · " + Build.MANUFACTURER + " " + Build.MODEL + " · " + Build.SUPPORTED_ABIS.joinToString())
         try { ensureChannels(this) } catch (e: Throwable) { logError("channels", e) }
         try { Health.start(this) } catch (e: Throwable) { logError("health", e) }
@@ -128,8 +129,21 @@ class WakeService : Service(), RecognitionListener {
         }
         // Αν η υπηρεσία είχε κλείσει και ξαναξεκίνησε με οποιαδήποτε εντολή (π.χ. «συνέχισε»), φορτώνει ξανά και ακούει,
         // αντί να κλείνει πάλι αμέσως (αυτό άφηνε τον JARVIS κουφό μέχρι τη «Δοκιμή ακρόασης»).
+        if (intent == null) log("ξαναξεκίνησε από το σύστημα, μετά από κλείσιμο")
         if (foreground && !initStarted) { initStarted = true; Thread({ init() }, "wake-init").start() }
-        return START_NOT_STICKY
+        // Όπως στην πρώτη έκδοση: αν το κινητό κλείσει την υπηρεσία (π.χ. σύρσιμο από τις πρόσφατες), το Android την ξαναξεκινά.
+        return START_STICKY
+    }
+
+    /** Σύρσιμο του JARVIS έξω από τις πρόσφατες: ζητάμε επανεκκίνηση σε 2″, για την περίπτωση που το κινητό σκοτώσει τη διεργασία. */
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        log("η εφαρμογή έκλεισε από τις πρόσφατες· η ακρόαση συνεχίζει")
+        try {
+            val pi = PendingIntent.getForegroundService(this, 7, Intent(this, WakeService::class.java).setAction(ACTION_START), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+            val am = getSystemService(Context.ALARM_SERVICE) as android.app.AlarmManager
+            am.set(android.app.AlarmManager.ELAPSED_REALTIME_WAKEUP, SystemClock.elapsedRealtime() + 2000, pi)
+        } catch (e: Throwable) { logError("επανεκκίνηση", e) }
+        super.onTaskRemoved(rootIntent)
     }
 
     override fun onDestroy() {
