@@ -81,7 +81,7 @@ if (A) {
   // Μία φορά: ξανανοίγει την ακρόαση «Τζάρβις», αν είχε κλείσει κατά λάθος (π.χ. από πάτημα στη μπάρα).
   if (!S.wakeFixV1) { S.wakeFixV1 = true; S.wake = true; saveSettings(); }
   if (!S.bargeResetV2) { S.bargeResetV2 = true; S.bargeResetV1 = true; S.bargeIn = true; S.bargeSens = 2; saveSettings(); }
-  function bargeOn() { if (S.bargeIn !== true || !A.bargeStart) return; try { A.bargeStart(S.bargeSens || 2); } catch {} }
+  function bargeOn() { if (S.bargeIn !== true || !A.bargeStart || (window.__interp && window.__interp.on)) return; try { A.bargeStart(S.bargeSens || 2); } catch {} }
   function bargeOff() { if (!A.bargeStop) return; try { A.bargeStop(); } catch {} }
   window.__nativeBarge = () => {
     if (!Voice.speakingNow) return;
@@ -134,6 +134,8 @@ if (A) {
     Voice.listening = false; $('#interim').textContent = ''; if (Core.state === 'listening') Core.set('idle'); Sound.stop();
     // Αν το κινητό δεν έδωσε τελικό κείμενο, κρατάμε ό,τι είχε ακούσει ως εκείνη τη στιγμή.
     const t = (finalText || partialText).trim(); finalText = ''; partialText = '';
+    // Διερμηνέας: ό,τι ακούγεται πάει για μετάφραση, όχι για εντολή.
+    if (window.__interp && window.__interp.on) { window.__interp.heard(t); return; }
     if (t && Date.now() - bargeAt < 8000 && t.split(/\s+/).length === 1 && !/^(ναι|οχι|όχι|οκ|ok|τέλος|τελος|άλλο|αλλο)$/i.test(t)) { bargeFalse = 0; bargeAt = 0; try { closeAll(); } catch {} addMsg('ai', '■ Σταμάτησα.'); A.wakeDone(); }
     else if (t) { const wasSess = !!sessWakeAt; sessWakeAt = 0; missCount = 0; followUp = 0; mediaWakeAt = 0; if (Date.now() - bargeAt < 15000) bargeFalse = 0; lastVoiceCmd = Date.now(); tHeard = Date.now(); T.listen = tStart ? (tHeard - tStart) / 1000 : 0; if (!stopSessionIf(t)) { if (wasSess) musicDuck(false); handle(t); } }
     else {
@@ -170,6 +172,8 @@ if (A) {
   /* ---------- Αφύπνιση από «Τζάρβις» ---------- */
   const booted = () => !$('#hud').classList.contains('hidden');
   async function onWake() {
+    if (window.__stopFinding) window.__stopFinding();
+    if (window.__interp && window.__interp.on) return;
     if (!booted()) { await boot(); await sleep(600); }
     if (typeof Standby !== 'undefined' && Standby.on) Standby.hide();
     // Μέσα σε πρόγραμμα (γιόγκα, διαλογισμός, γυμναστική): «Τζάρβις» κόβει τη φωνή και ακούει, π.χ. «σταμάτα». Το πρόγραμμα συνεχίζει αν δεν ειπωθεί κάτι.
@@ -218,6 +222,118 @@ if (A) {
     { re: /(πιο αυστηρη αναγνωριση φωνησ|ξυπνασ με αλλουσ|ξυπνασ με την τηλεοραση)/, run: () => spkThr(0.05) },
     { re: /(πιο χαλαρη αναγνωριση φωνησ|δεν με αναγνωριζεισ|δεν αναγνωριζεισ τη φωνη μου)/, run: () => spkThr(-0.05) },
   );
+  /* ---------- Διερμηνέας για ταξίδια (εφαρμογή v38+) ----------
+     «μετάφραζε στα αγγλικά»: μιλάτε ελληνικά → το λέω στα αγγλικά → ακούω την απάντηση στα αγγλικά → τη λέω στα ελληνικά → ξανά. */
+  const LANGS = { αγγλικα: 'en-US', ιταλικα: 'it-IT', γερμανικα: 'de-DE', γαλλικα: 'fr-FR', ισπανικα: 'es-ES', πορτογαλικα: 'pt-PT', ολλανδικα: 'nl-NL', τουρκικα: 'tr-TR', αλβανικα: 'sq-AL', βουλγαρικα: 'bg-BG', ρουμανικα: 'ro-RO', σερβικα: 'sr-RS', ρωσικα: 'ru-RU', πολωνικα: 'pl-PL', κινεζικα: 'zh-CN', ιαπωνικα: 'ja-JP', αραβικα: 'ar-SA' };
+  const LANG_EN = { en: 'English', it: 'Italian', de: 'German', fr: 'French', es: 'Spanish', pt: 'Portuguese', nl: 'Dutch', tr: 'Turkish', sq: 'Albanian', bg: 'Bulgarian', ro: 'Romanian', sr: 'Serbian', ru: 'Russian', pl: 'Polish', zh: 'Chinese', ja: 'Japanese', ar: 'Arabic', el: 'Greek' };
+  async function translate(text, from, to) {
+    const g = await askGroq(`You are a professional interpreter. Translate the user's message from ${LANG_EN[from] || from} to ${LANG_EN[to] || to}. Keep the meaning and a natural spoken tone. Reply with the translation only, no quotes, no notes.`, [{ role: 'user', parts: [{ text }] }], 7000);
+    if (g && g.text) return g.text.replace(/^["«]|["»]$/g, '').trim();
+    try {
+      const r = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=${from}&tl=${to}&dt=t&q=${encodeURIComponent(text)}`, { signal: AbortSignal.timeout ? AbortSignal.timeout(6000) : undefined });
+      if (r.ok) { const j = await r.json(); const o = (j[0] || []).map((x) => x[0]).join('').trim(); if (o) return o; }
+    } catch {}
+    return null;
+  }
+  const Interp = window.__interp = {
+    on: false, lang: 'en-US', name: '', side: 'el', miss: 0,
+    async start(tag, name) {
+      if (!A.setLang) return 'Ο διερμηνέας χρειάζεται τη νεότερη εφαρμογή. Εγκαταστήστε τη και ξαναδοκιμάστε.';
+      this.on = true; this.lang = tag; this.name = name; this.miss = 0; A.setLang('el-GR', 'el-GR');
+      try { closeAll(); } catch {}
+      const noVoice = A.langAvailable && A.langAvailable(tag) < 0;
+      await say(`Διερμηνέας στα ${name}. Μιλήστε ελληνικά και θα το πω στα ${name}. Μετά ακούω την απάντηση και σας τη λέω στα ελληνικά. Για τέλος, πείτε «τέλος μετάφρασης».${noVoice ? ` Προσοχή: το κινητό δεν έχει φωνή για τα ${name}. Θα δείχνω τη μετάφραση στην οθόνη.` : ''}`, { noRelisten: true });
+      this.listen('el');
+      return null;
+    },
+    listen(side) {
+      if (!this.on) return; this.side = side;
+      A.setLang(side === 'el' ? 'el-GR' : this.lang, 'el-GR');
+      toast('ΔΙΕΡΜΗΝΕΑΣ', side === 'el' ? 'Μιλήστε ελληνικά' : `Ακούω ${this.name}…`, 3000);
+      setTimeout(() => { if (this.on && !Voice.listening && !Voice.speakingNow) A.listen(); }, 300);
+    },
+    async heard(t) {
+      if (!t) { if (++this.miss >= 4) return this.stop(true); return this.listen(this.side === 'el' ? 'fl' : 'el'); }
+      this.miss = 0;
+      const n = norm(t);
+      if (/(τελοσ μεταφρασησ|τελοσ διερμηνεα|σταματα (τη )?μεταφραση|^(σταματα|φτανει|τελοσ)$)/.test(n) || (this.side !== 'el' && /^(stop|basta|stopp)$/.test(n))) return this.stop();
+      addMsg('user', t);
+      const from = this.side === 'el' ? 'el' : this.lang.slice(0, 2), to = this.side === 'el' ? this.lang.slice(0, 2) : 'el';
+      const out = await translate(t, from, to);
+      if (!this.on) return;
+      if (!out) { await say('Δεν μπόρεσα να το μεταφράσω, ίσως λείπει το ίντερνετ. Ξαναπείτε το.', { noRelisten: true }); return this.listen(this.side); }
+      addMsg('ai', out);
+      A.setLang('el-GR', to === 'el' ? 'el-GR' : this.lang);
+      await Voice.speak(out);
+      A.setLang('el-GR', 'el-GR');
+      this.listen(this.side === 'el' ? 'fl' : 'el');
+    },
+    stop(silent) {
+      this.on = false; try { A.setLang('el-GR', 'el-GR'); } catch {} lastVoiceCmd = 0; followUp = 0;
+      if (silent) { toast('ΔΙΕΡΜΗΝΕΑΣ', 'Τέλος μετάφρασης.', 3000); A.wakeDone(); } else say('Τέλος μετάφρασης.', { noRelisten: true });
+    },
+  };
+  intents.unshift({
+    re: /(μεταφραζε|μεταφρασε|διερμηνεα|διερμηνεασ|κανε μεταφραση|μιλα για μενα) .*?(αγγλικα|ιταλικα|γερμανικα|γαλλικα|ισπανικα|πορτογαλικα|ολλανδικα|τουρκικα|αλβανικα|βουλγαρικα|ρουμανικα|σερβικα|ρωσικα|πολωνικα|κινεζικα|ιαπωνικα|αραβικα)/,
+    run: (raw, n) => { const m = n.match(/(αγγλικα|ιταλικα|γερμανικα|γαλλικα|ισπανικα|πορτογαλικα|ολλανδικα|τουρκικα|αλβανικα|βουλγαρικα|ρουμανικα|σερβικα|ρωσικα|πολωνικα|κινεζικα|ιαπωνικα|αραβικα)/); const key = m[1]; const shown = { κινεζικα: 'κινέζικα' }[key] || key.replace(/ικα$/, 'ικά'); if (!A.setLang) return 'Ο διερμηνέας χρειάζεται τη νεότερη εφαρμογή. Εγκαταστήστε τη και ξαναδοκιμάστε.'; Interp.start(LANGS[key], shown); return { silent: true, text: '' }; },
+  });
+
+  /* ---------- «Τζάρβις, πού είσαι;»: το κινητό χτυπάει δυνατά, ακόμα και στο αθόρυβο ---------- */
+  let finding = false;
+  const stopFinding = () => { if (!finding) return; finding = false; try { A.stopFind(); } catch {} document.removeEventListener('pointerdown', stopFinding, true); };
+  window.__stopFinding = stopFinding;
+  intents.unshift({
+    re: /(που εισαι|που βρισκεσαι|που ειναι το κινητο|βρεσ το κινητο|δεν βρισκω το κινητο|χτυπα το κινητο|χτυπα να σε βρω)/,
+    run: () => {
+      if (!A.findPhone) return 'Εδώ είμαι, κύριε! Για να χτυπάω δυνατά, εγκαταστήστε τη νεότερη εφαρμογή.';
+      lastVoiceCmd = 0; followUp = 0;
+      say('Εδώ είμαι, κύριε!', { noRelisten: true }).then(() => { finding = true; A.findPhone(); toast('ΕΔΩ ΕΙΜΑΙ', 'Αγγίξτε την οθόνη για να σταματήσει το κουδούνισμα.', 30000); document.addEventListener('pointerdown', stopFinding, true); setTimeout(stopFinding, 30000); A.wakeDone(); });
+      return { silent: true, text: '' };
+    },
+  });
+
+  /* ---------- Αυτόματος έλεγχος: μία φορά τη μέρα, σιωπηλά. Μιλάει μόνο αν κάτι χάλασε (και όπου μπορεί, το διορθώνει). ---------- */
+  // Οι έλεγχοι του εγκεφάλου ζητούν μόνο τη λίστα μοντέλων: δεν ξοδεύουν δωρεάν ερωτήσεις.
+  const okFetch = async (url, headers) => { try { const r = await fetch(url, { headers, signal: AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined }); return r.status; } catch { return 0; } };
+  async function selfCheck(manual) {
+    const bad = [], fixed = [];
+    let st = {}; try { st = JSON.parse(A.systemState ? A.systemState() : '{}'); } catch {}
+    if (st.mic === false) bad.push('δεν έχω άδεια για το μικρόφωνο. Ρυθμίσεις → Εφαρμογές → JARVIS → Άδειες → Μικρόφωνο');
+    if (st.notif === false) bad.push('δεν έχω άδεια για ειδοποιήσεις, οπότε οι υπενθυμίσεις μπορεί να μη χτυπούν');
+    if (st.battery === false) bad.push('η εξοικονόμηση μπαταρίας μπορεί να με κλείνει. Βάλτε «Χωρίς περιορισμούς» στη μπαταρία του JARVIS');
+    if (st.overlay === false) bad.push('λείπει η άδεια «Εμφάνιση πάνω από άλλες εφαρμογές», οπότε δεν μπορώ να ανοίγω μόνος μου με το «Τζάρβις»');
+    if ((S.wake || S.handsFree) && st.wakeProven) {
+      if (!Wake.on) { Wake.start(); fixed.push('η ακρόαση «Τζάρβις» ήταν κλειστή και την άνοιξα'); }
+      else if (st.wakeUp === false) { try { A.setWakeEnabled(true); } catch {} fixed.push('η ακρόαση «Τζάρβις» είχε σταματήσει και την ξαναξεκίνησα'); }
+    }
+    let online = navigator.onLine;
+    if (online) { try { await fetch('https://www.gstatic.com/generate_204', { mode: 'no-cors', cache: 'no-store', signal: AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined }); } catch { online = false; } }
+    if (!online) bad.push('δεν έχω ίντερνετ, οπότε ο εγκέφαλος και η αναγνώριση φωνής δεν δουλεύουν');
+    else {
+      if (S.groqKey) { const s = await okFetch('https://api.groq.com/openai/v1/models', { Authorization: 'Bearer ' + S.groqKey }); if (s === 401 || s === 403) bad.push('το κλειδί του Groq δεν ισχύει πια. Πείτε «ρύθμισε το Groq»'); }
+      if (S.aiKey && !/^sk-or-/.test(S.aiKey)) { const s = await okFetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=1&key=' + encodeURIComponent(S.aiKey)); if (s === 400 || s === 401 || s === 403) bad.push('το κλειδί του Gemini δεν ισχύει πια. Πείτε «ρύθμισε τον εγκέφαλο»'); }
+      if (typeof gptKey === 'function' && gptKey()) { const s = await okFetch('https://openrouter.ai/api/v1/auth/key', { Authorization: 'Bearer ' + gptKey() }); if (s === 401 || s === 403) bad.push('το κλειδί του ChatGPT δεν ισχύει πια. Πείτε «ρύθμισε το ChatGPT»'); }
+      if (!S.groqKey && !S.aiKey && !(typeof gptKey === 'function' && gptKey())) bad.push('δεν έχω ρυθμισμένο εγκέφαλο. Πείτε «ρύθμισε το Groq»');
+    }
+    try { Store.set('selfCheck', { at: Date.now(), bad, fixed }); } catch {}
+    const parts = [];
+    if (fixed.length) parts.push('Διόρθωσα μόνος μου: ' + fixed.join('· ') + '.');
+    if (bad.length) parts.push((bad.length === 1 ? 'Βρήκα ένα πρόβλημα: ' : 'Βρήκα προβλήματα: ') + bad.join('. ') + '.');
+    if (!parts.length) return manual ? 'Έλεγξα τα πάντα: μικρόφωνο, ακρόαση, άδειες, ίντερνετ και εγκέφαλο. Όλα λειτουργούν κανονικά.' : null;
+    return 'Αυτόματος έλεγχος. ' + parts.join(' ');
+  }
+  window.selfCheck = selfCheck;
+  setInterval(async () => {
+    try {
+      const last = (Store.get('selfCheck', {}) || {}).at || 0, h = new Date().getHours();
+      if (Date.now() - last < 20 * 3600000 || h < 8 || h > 22) return;
+      if (Voice.listening || Voice.speakingNow || Session.active || (window.__interp && __interp.on) || Date.now() - lastVoiceCmd < 120000) return;
+      const msg = await selfCheck(false);
+      if (msg) { addMsg('ai', msg); say(msg, { noRelisten: true }); }
+    } catch {}
+  }, 10 * 60000);
+  intents.unshift({ re: /(ελεγχοσ συστηματοσ|κανε ελεγχο|ελεγξε τα παντα|ελεγξε αν δουλευουν ολα|δουλευουν ολα|ολα καλα με σενα)/, run: async () => (await selfCheck(true)) || 'Όλα λειτουργούν κανονικά.' });
+
   intents.unshift(
     { re: SHUTDOWN, run: () => { shutDown(); return { silent: true, text: '' }; } },
     { re: OPEN, run: () => 'Είμαι εδώ, κύριε. Πείτε μου.' },

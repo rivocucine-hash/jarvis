@@ -318,9 +318,42 @@ class MainActivity : Activity() {
     private fun hasMic() = checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
     private fun wakeProven() = WakeService.okFile(this).exists()
     private var wakeBound = false
+    @Volatile private var wakeConnected = false
     private val wakeConn = object : android.content.ServiceConnection {
-        override fun onServiceConnected(name: android.content.ComponentName?, service: android.os.IBinder?) { js("window.__nativeWakeState && __nativeWakeState('up')") }
-        override fun onServiceDisconnected(name: android.content.ComponentName?) { js("window.__nativeWakeState && __nativeWakeState('died')") }
+        override fun onServiceConnected(name: android.content.ComponentName?, service: android.os.IBinder?) { wakeConnected = true; js("window.__nativeWakeState && __nativeWakeState('up')") }
+        override fun onServiceDisconnected(name: android.content.ComponentName?) { wakeConnected = false; js("window.__nativeWakeState && __nativeWakeState('died')") }
+    }
+
+    /* ---------------- Διερμηνέας & εύρεση κινητού ---------------- */
+    @Volatile private var sttLang = "el-GR"
+    @Volatile private var ttsLang = "el-GR"
+    private var findPlayer: android.media.MediaPlayer? = null
+    private var findVolume = -1
+    private fun startFind() {
+        stopFindNow()
+        try {
+            val am = getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
+            findVolume = am.getStreamVolume(android.media.AudioManager.STREAM_ALARM)
+            am.setStreamVolume(android.media.AudioManager.STREAM_ALARM, am.getStreamMaxVolume(android.media.AudioManager.STREAM_ALARM), 0)
+            val uri = android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_ALARM) ?: android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_RINGTONE)
+            findPlayer = android.media.MediaPlayer().apply {
+                setAudioAttributes(android.media.AudioAttributes.Builder().setUsage(android.media.AudioAttributes.USAGE_ALARM).setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION).build())
+                setDataSource(this@MainActivity, uri); isLooping = true; prepare(); start()
+            }
+        } catch (e: Throwable) { note("findPhone " + e) }
+        try {
+            val vib = if (Build.VERSION.SDK_INT >= 31) (getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as android.os.VibratorManager).defaultVibrator else @Suppress("DEPRECATION") (getSystemService(Context.VIBRATOR_SERVICE) as android.os.Vibrator)
+            vib.vibrate(android.os.VibrationEffect.createWaveform(longArrayOf(0, 700, 400), 0))
+        } catch (_: Throwable) {}
+        val my = ++findToken
+        main.postDelayed({ if (my == findToken) stopFindNow() }, 30000)
+    }
+    private var findToken = 0
+    private fun stopFindNow() {
+        try { findPlayer?.stop(); findPlayer?.release() } catch (_: Throwable) {}
+        findPlayer = null
+        try { (if (Build.VERSION.SDK_INT >= 31) (getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as android.os.VibratorManager).defaultVibrator else @Suppress("DEPRECATION") (getSystemService(Context.VIBRATOR_SERVICE) as android.os.Vibrator)).cancel() } catch (_: Throwable) {}
+        if (findVolume >= 0) { try { (getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager).setStreamVolume(android.media.AudioManager.STREAM_ALARM, findVolume, 0) } catch (_: Throwable) {}; findVolume = -1 }
     }
     /** Ξεκινά την ακρόαση στη δική της διεργασία και παρακολουθεί αν θα τερματιστεί. */
     private fun startWake() {
@@ -422,7 +455,7 @@ class MainActivity : Activity() {
         })
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "el-GR")
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, sttLang)
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
             // Πιο γρήγορο τέλος ακρόασης: λιγότερη αναμονή σιωπής μετά την ομιλία.
@@ -441,7 +474,9 @@ class MainActivity : Activity() {
 
         @JavascriptInterface fun speak(text: String, rate: Float, pitch: Float, voiceName: String) = main.post {
             val t = tts ?: return@post
-            if (voiceName.isNotEmpty()) voiceMap[voiceName]?.let { t.voice = it }
+            // Διερμηνέας: ξένη γλώσσα ομιλίας (η ελληνική φωνή του χρήστη δεν ισχύει τότε).
+            if (ttsLang != "el-GR") t.language = Locale.forLanguageTag(ttsLang)
+            else if (voiceName.isNotEmpty()) voiceMap[voiceName]?.let { t.voice = it }
             else t.language = Locale("el", "GR")
             t.setSpeechRate(rate); t.setPitch(pitch)
             t.speak(text, TextToSpeech.QUEUE_FLUSH, null, "u" + System.currentTimeMillis())
@@ -515,6 +550,26 @@ class MainActivity : Activity() {
         @JavascriptInterface fun bargeStop() { barge.stop() }
         /** «Τζάρβις shut down»: η εφαρμογή φεύγει από την οθόνη, η ακρόαση «Τζάρβις» μένει ανοιχτή. */
         @JavascriptInterface fun minimize() { main.post { moveTaskToBack(true) } }
+
+        /* Διερμηνέας: γλώσσα ακρόασης και ομιλίας (π.χ. "en-US"). "el-GR" = κανονικά. */
+        @JavascriptInterface fun setLang(stt: String, tts: String) { sttLang = stt.ifBlank { "el-GR" }; ttsLang = tts.ifBlank { "el-GR" } }
+        /** Υπάρχει φωνή του κινητού για αυτή τη γλώσσα; (0+ = ναι, αρνητικό = λείπει) */
+        @JavascriptInterface fun langAvailable(tag: String): Int = try { tts?.isLanguageAvailable(Locale.forLanguageTag(tag)) ?: -9 } catch (_: Throwable) { -9 }
+
+        /* «Τζάρβις, πού είσαι;»: δυνατό κουδούνισμα ξυπνητηριού (ακούγεται και στο αθόρυβο) και δόνηση, έως 30″ ή μέχρι «σταμάτα». */
+        @JavascriptInterface fun findPhone() { main.post { startFind() } }
+        @JavascriptInterface fun stopFind() { main.post { stopFindNow() } }
+
+        /** Για τον αυτόματο έλεγχο: άδειες και κατάσταση της ακρόασης. */
+        @JavascriptInterface fun systemState(): String {
+            val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+            val o = JSONObject()
+            o.put("mic", hasMic()); o.put("overlay", Settings.canDrawOverlays(this@MainActivity))
+            o.put("battery", pm.isIgnoringBatteryOptimizations(packageName))
+            o.put("notif", Build.VERSION.SDK_INT < 33 || checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED)
+            o.put("wakeUp", wakeConnected); o.put("wakeEnabled", wakeEnabled()); o.put("wakeProven", wakeProven())
+            return o.toString()
+        }
         /* «Μόνο η δική μου φωνή»: εκμάθηση, κατάσταση, διαγραφή, όριο ομοιότητας. Τα αρχεία τα μοιράζεται με την υπηρεσία ακρόασης. */
         @JavascriptInterface fun spkEnroll() { main.post { try { WakeService.enrollFile(this@MainActivity).writeText("0/" + WakeService.ENROLL_N) } catch (_: Throwable) {}; WakeService.send(this@MainActivity, WakeService.ACTION_ENROLL) } }
         @JavascriptInterface fun spkStatus(): String {
