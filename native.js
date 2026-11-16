@@ -78,6 +78,8 @@ if (A) {
   const musicDuck = (on) => { try { const n = Music.n, ctx = Sound.ctx; if (!n || !ctx) return; n.out.gain.cancelScheduledValues(ctx.currentTime); n.out.gain.setTargetAtTime(on ? 0.08 : 0.9, ctx.currentTime, 0.15); } catch {} };
   const mediaOn = () => !!((window.Radio && Radio.on) || Music.n || (typeof Party !== 'undefined' && Party.on));
   // Κλειστή από προεπιλογή: κρατά το μικρόφωνο όσο μιλάω και σε κάποια κινητά καθυστερεί ή μπλοκάρει την επόμενη ακρόαση.
+  // Μία φορά: ξανανοίγει την ακρόαση «Τζάρβις», αν είχε κλείσει κατά λάθος (π.χ. από πάτημα στη μπάρα).
+  if (!S.wakeFixV1) { S.wakeFixV1 = true; S.wake = true; saveSettings(); }
   if (!S.bargeResetV2) { S.bargeResetV2 = true; S.bargeResetV1 = true; S.bargeIn = true; S.bargeSens = 2; saveSettings(); }
   function bargeOn() { if (S.bargeIn !== true || !A.bargeStart) return; try { A.bargeStart(S.bargeSens || 2); } catch {} }
   function bargeOff() { if (!A.bargeStop) return; try { A.bargeStop(); } catch {} }
@@ -231,7 +233,8 @@ if (A) {
   );
   Wake.start = function () {
     if (!wakeProven()) { this.on = false; Banner.set('wake', '⚠ Η ακρόαση «Τζάρβις» δεν έχει δοκιμαστεί. Γράψτε «δοκιμή ακρόασης».', () => Banner.clear('wake')); return false; }
-    this.on = true; A.setWakeEnabled(true); Banner.set('wake', '🎙 Πείτε «Τζάρβις» οποιαδήποτε στιγμή', () => { S.wake = false; S.handsFree = false; saveSettings(); fillSettings(); this.stop(); }); return true; };
+    // Πάτημα στη μπάρα: μόνο την κρύβει. Παλιά έκλεινε την ακρόαση για πάντα και ήταν εύκολο να πατηθεί κατά λάθος.
+    this.on = true; A.setWakeEnabled(true); Banner.set('wake', '🎙 Πείτε «Τζάρβις» οποιαδήποτε στιγμή', () => Banner.clear('wake')); return true; };
   Wake.stop = function () { this.on = false; A.setWakeEnabled(false); Banner.clear('wake'); };
   Wake.pause = () => {}; Wake.resume = () => {}; Wake.loop = () => {}; Wake.keepAwake = async () => {};
 

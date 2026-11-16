@@ -125,7 +125,8 @@ class WakeService : Service(), RecognitionListener {
             ACTION_RESUME -> resume()
             ACTION_SESSION_ON -> { sessionMode = true; log("λειτουργία προγράμματος") }
             ACTION_SESSION_OFF -> { sessionMode = false }
-            ACTION_STOP -> { log("τερματισμός κατόπιν αιτήματος"); stopSelf(); return START_NOT_STICKY }
+            // stopSelf(startId): αν ήρθε ήδη νεότερο «ξεκίνα» (π.χ. κλείσε-άνοιξε από ρυθμίσεις), δεν κλείνει.
+            ACTION_STOP -> { log("τερματισμός κατόπιν αιτήματος"); stopSelf(startId); return START_NOT_STICKY }
         }
         // Αν η υπηρεσία είχε κλείσει και ξαναξεκίνησε με οποιαδήποτε εντολή (π.χ. «συνέχισε»), φορτώνει ξανά και ακούει,
         // αντί να κλείνει πάλι αμέσως (αυτό άφηνε τον JARVIS κουφό μέχρι τη «Δοκιμή ακρόασης»).
@@ -204,14 +205,13 @@ class WakeService : Service(), RecognitionListener {
 
     private fun ongoing(): Notification {
         val open = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-        val stop = PendingIntent.getService(this, 1, Intent(this, WakeService::class.java).setAction(ACTION_STOP), PendingIntent.FLAG_IMMUTABLE)
         return Notification.Builder(this, CH_WAKE)
             .setSmallIcon(R.drawable.ic_stat)
             .setContentTitle("JARVIS σε αναμονή")
             .setContentText("Πείτε «Τζάρβις» οποιαδήποτε στιγμή")
             .setOngoing(true)
             .setContentIntent(open)
-            .addAction(Notification.Action.Builder(null, "Τέλος ακρόασης", stop).build())
+            // Χωρίς κουμπί «Τέλος ακρόασης»: πατιόταν κατά λάθος. Η ακρόαση κλείνει με τη φωνή («κλείσε το μικρόφωνο») ή από τις ρυθμίσεις.
             .build()
     }
 
