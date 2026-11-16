@@ -221,7 +221,8 @@ if (A) {
   // Φύλακας: όταν η εφαρμογή δεν ακούει και δεν μιλάει, ζητάμε κάθε 20″ από την ακρόαση «Τζάρβις» να συνεχίσει.
   // Αν ήδη ακούει, το κινητό το αγνοεί· αν είχε κολλήσει (π.χ. μικρόφωνο απασχολημένο), ξαναρχίζει.
   setInterval(() => {
-    try { if (Wake.on && !Voice.listening && !Voice.speakingNow && followUp === 0 && Date.now() - followAt > 25000) A.wakeDone(); } catch {}
+    // Επίσης «ξεκίνα»: αν η υπηρεσία είχε κλείσει μόνη της (π.χ. μικρόφωνο απασχολημένο), ξαναφορτώνει· αν τρέχει, δεν κάνει τίποτα.
+    try { if (Wake.on && !Voice.listening && !Voice.speakingNow && followUp === 0 && Date.now() - followAt > 25000) { if (wakeProven()) A.setWakeEnabled(true); A.wakeDone(); } } catch {}
   }, 20000);
   intents.unshift(
     { re: /(δοκιμη ακροασησ|δοκιμασε (ξανα )?την ακροαση|ξαναδοκιμασε την ακροαση|ενεργοποιησε την ακροαση τζαρβισ|τεστ ακροασησ)/, run: () => WakeTest.start() },

@@ -119,13 +119,15 @@ class WakeService : Service(), RecognitionListener {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
-            ACTION_PAUSE -> if (initStarted) pause() else { stopSelf(); return START_NOT_STICKY }
-            ACTION_RESUME -> if (initStarted) resume() else { stopSelf(); return START_NOT_STICKY }
+            ACTION_PAUSE -> pause()
+            ACTION_RESUME -> resume()
             ACTION_SESSION_ON -> { sessionMode = true; log("λειτουργία προγράμματος") }
             ACTION_SESSION_OFF -> { sessionMode = false }
             ACTION_STOP -> { log("τερματισμός κατόπιν αιτήματος"); stopSelf(); return START_NOT_STICKY }
-            else -> if (foreground && !initStarted) { initStarted = true; Thread({ init() }, "wake-init").start() }
         }
+        // Αν η υπηρεσία είχε κλείσει και ξαναξεκίνησε με οποιαδήποτε εντολή (π.χ. «συνέχισε»), φορτώνει ξανά και ακούει,
+        // αντί να κλείνει πάλι αμέσως (αυτό άφηνε τον JARVIS κουφό μέχρι τη «Δοκιμή ακρόασης»).
+        if (foreground && !initStarted) { initStarted = true; Thread({ init() }, "wake-init").start() }
         return START_NOT_STICKY
     }
 
@@ -204,13 +206,22 @@ class WakeService : Service(), RecognitionListener {
             alive += 5
             if (alive == 10) { try { okFile(this@WakeService).writeText("ok") } catch (_: Throwable) {}; log("10 ΣΤΑΘΕΡΗ ακρόαση 10″ · η ακρόαση «Τζάρβις» λειτουργεί σε αυτό το κινητό") }
             else if (alive <= 60 || alive % 300 == 0) log("ζωντανή ${alive}″")
+            // Αυτοθεραπεία: αν έμεινε σε παύση πάνω από 45″ (χάθηκε η εντολή «συνέχισε») ή δεν ακούει χωρίς λόγο, ξαναρχίζει.
+            if (paused && SystemClock.elapsedRealtime() - pausedAt > 45000) { log("παύση πάνω από 45″: συνεχίζω μόνη μου"); resume() }
+            else if (!paused && speech == null && model != null && !retryPending) { log("δεν άκουγε: ξαναρχίζω"); startListening() }
             main.postDelayed(this, 5000)
         }
     }
 
+    /** Αποτυχίες στη σειρά στο άνοιγμα μικροφώνου (π.χ. το κρατά ακόμα άλλη ακρόαση): ξαναδοκιμάζουμε με αυξανόμενη αναμονή. */
+    private var micFails = 0
+    private var retryPending = false
+    private var pausedAt = 0L
+
     private fun startListening() {
         val m = model ?: return
         if (paused || speech != null) return
+        retryPending = false
         try {
             log("7 δημιουργία αναγνωριστή")
             // Λέξεις-«δολώματα» που μοιάζουν ηχητικά: απορροφούν άλλες ομιλίες, ώστε να μην ξυπνάει κατά λάθος.
@@ -219,16 +230,26 @@ class WakeService : Service(), RecognitionListener {
             log("8 άνοιγμα μικροφώνου")
             speech = SpeechService(rec, 16000f).also { it.startListening(this) }
             log("9 ΑΚΟΥΕΙ για «Τζάρβις»")
-            main.removeCallbacks(heartbeat); main.postDelayed(heartbeat, 5000)
-        } catch (e: Throwable) { logError("ακρόαση", e); main.postDelayed({ stopSelf() }, 200) }
+            micFails = 0
+            if (!heartbeatOn) { heartbeatOn = true; main.postDelayed(heartbeat, 5000) }
+        } catch (e: Throwable) {
+            // Παλιά εδώ η υπηρεσία έκλεινε για πάντα. Τώρα ξαναδοκιμάζει: 1″, 2″, 4″ … έως 30″.
+            logError("ακρόαση", e); stopListening()
+            val wait = minOf(30000L, 1000L shl minOf(micFails, 5)); micFails++
+            log("ξαναδοκιμή μικροφώνου σε ${wait / 1000}″")
+            retryPending = true
+            main.postDelayed({ startListening() }, wait)
+            if (!heartbeatOn) { heartbeatOn = true; main.postDelayed(heartbeat, 5000) }
+        }
     }
+    private var heartbeatOn = false
 
     private fun stopListening() {
         try { speech?.stop(); speech?.shutdown() } catch (_: Throwable) {}
         speech = null
     }
 
-    private fun pause() { paused = true; stopListening() }
+    private fun pause() { paused = true; pausedAt = SystemClock.elapsedRealtime(); stopListening() }
     private fun resume() { paused = false; main.postDelayed({ startListening() }, 400) }
 
     /* ---------------- Vosk ---------------- */
