@@ -195,6 +195,29 @@ if (A) {
     await say(full ? 'Τα λέμε, κύριε. Κλείνω και το μικρόφωνο. Ανοίξτε με από το εικονίδιο όταν με χρειαστείτε.' : 'Τα λέμε, κύριε. Πείτε «Τζάρβις open» όταν με χρειαστείτε.', { noRelisten: true });
     try { if (full) { Wake.on = false; Banner.clear('wake'); A.shutdown(); } else if (A.minimize) A.minimize(); } catch {}
   };
+  /* «Μόνο η δική μου φωνή»: εκμάθηση με 5 φορές «Τζάρβις» (εφαρμογή v37+). Μετά, το «Τζάρβις» από άλλη φωνή (τηλεόραση, άλλοι) αγνοείται. */
+  let spkPoll = null;
+  const spkLearn = async () => {
+    if (!A.spkEnroll) return 'Αυτή η έκδοση της εφαρμογής δεν έχει αναγνώριση φωνής. Εγκαταστήστε τη νεότερη.';
+    clearInterval(spkPoll); lastVoiceCmd = 0; followUp = 0;
+    await say('Θα μάθω τη φωνή σας. Μετά τον ήχο, πείτε «Τζάρβις» πέντε φορές, όπως μιλάτε συνήθως, με μια μικρή παύση ανάμεσα.', { noRelisten: true });
+    await sleep(600); Sound.listen(); A.spkEnroll();
+    let last = '', n = 0;
+    spkPoll = setInterval(() => {
+      let st = ''; try { st = A.spkStatus(); } catch {}
+      if (st !== last) { last = st; if (/^\d+\/\d+$/.test(st) && st[0] !== '0') { Sound.tap && Sound.tap(); toast('ΦΩΝΗ', `Δείγμα ${st}`, 2000); } }
+      if (st === 'enrolled') { clearInterval(spkPoll); celebrate && celebrate(true); say('Έμαθα τη φωνή σας. Από εδώ και πέρα ξυπνάω μόνο όταν με φωνάζετε εσείς. Αν κάποια φορά δεν σας ακούσω, πείτε «πιο χαλαρή αναγνώριση φωνής».', { noRelisten: true }); }
+      else if (++n > 120) { clearInterval(spkPoll); say(`Η εκμάθηση δεν ολοκληρώθηκε (${st || 'κανένα δείγμα'}). Πείτε «μάθε τη φωνή μου» για να ξαναδοκιμάσουμε.`, { noRelisten: true }); }
+    }, 750);
+    return { silent: true, text: '' };
+  };
+  const spkThr = (d) => { if (!A.spkThreshold) return 'Αυτή η έκδοση της εφαρμογής δεν έχει αναγνώριση φωνής.'; const v = Math.round(Math.min(0.9, Math.max(0.1, A.spkThresholdGet() + d)) * 100) / 100; A.spkThreshold(v); return d > 0 ? `Έγινα πιο αυστηρός με τη φωνή (όριο ${v}).` : `Έγινα πιο χαλαρός με τη φωνή (όριο ${v}).`; };
+  intents.unshift(
+    { re: /(μαθε τη φωνη μου|ακου μονο τη φωνη μου|ακου μονο εμενα|μονο τη δικη μου φωνη|αναγνωρισε τη φωνη μου|ξαναμαθε τη φωνη μου)/, run: () => { if (!A.spkEnroll) return 'Αυτή η έκδοση της εφαρμογής δεν έχει αναγνώριση φωνής. Εγκαταστήστε τη νεότερη.'; spkLearn(); return { silent: true, text: '' }; } },
+    { re: /(ξεχνα τη φωνη μου|ακου ολουσ|ακου και αλλουσ|σβησε τη φωνη μου)/, run: () => { if (!A.spkForget) return 'Αυτή η έκδοση δεν έχει αναγνώριση φωνής.'; A.spkForget(); return 'Ξέχασα τη φωνή σας. Ξυπνάω πάλι με όποιον λέει «Τζάρβις».'; } },
+    { re: /(πιο αυστηρη αναγνωριση φωνησ|ξυπνασ με αλλουσ|ξυπνασ με την τηλεοραση)/, run: () => spkThr(0.05) },
+    { re: /(πιο χαλαρη αναγνωριση φωνησ|δεν με αναγνωριζεισ|δεν αναγνωριζεισ τη φωνη μου)/, run: () => spkThr(-0.05) },
+  );
   intents.unshift(
     { re: SHUTDOWN, run: () => { shutDown(); return { silent: true, text: '' }; } },
     { re: OPEN, run: () => 'Είμαι εδώ, κύριε. Πείτε μου.' },

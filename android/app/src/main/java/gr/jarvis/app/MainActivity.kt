@@ -515,6 +515,15 @@ class MainActivity : Activity() {
         @JavascriptInterface fun bargeStop() { barge.stop() }
         /** «Τζάρβις shut down»: η εφαρμογή φεύγει από την οθόνη, η ακρόαση «Τζάρβις» μένει ανοιχτή. */
         @JavascriptInterface fun minimize() { main.post { moveTaskToBack(true) } }
+        /* «Μόνο η δική μου φωνή»: εκμάθηση, κατάσταση, διαγραφή, όριο ομοιότητας. Τα αρχεία τα μοιράζεται με την υπηρεσία ακρόασης. */
+        @JavascriptInterface fun spkEnroll() { main.post { try { WakeService.enrollFile(this@MainActivity).writeText("0/" + WakeService.ENROLL_N) } catch (_: Throwable) {}; WakeService.send(this@MainActivity, WakeService.ACTION_ENROLL) } }
+        @JavascriptInterface fun spkStatus(): String {
+            val e = try { WakeService.enrollFile(this@MainActivity).readText().trim() } catch (_: Throwable) { "" }
+            return if (e.isNotEmpty() && e != "done") e else if (WakeService.spkFile(this@MainActivity).exists()) "enrolled" else "none"
+        }
+        @JavascriptInterface fun spkForget() { try { WakeService.spkFile(this@MainActivity).delete(); WakeService.enrollFile(this@MainActivity).delete() } catch (_: Throwable) {} }
+        @JavascriptInterface fun spkThreshold(v: Double) { try { WakeService.thrFile(this@MainActivity).writeText(v.coerceIn(0.1, 0.9).toString()) } catch (_: Throwable) {} }
+        @JavascriptInterface fun spkThresholdGet(): Double = try { WakeService.thrFile(this@MainActivity).readText().trim().toDouble() } catch (_: Throwable) { 0.4 }
         /** «Τζάρβις shut down»: κλείνουν μικρόφωνο και εφαρμογή. Η ρύθμιση ακρόασης δεν αλλάζει, ώστε με το επόμενο άνοιγμα από το εικονίδιο να ακούει ξανά. */
         @JavascriptInterface fun shutdown() { main.post {
             try { barge.stop() } catch (_: Throwable) {}

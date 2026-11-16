@@ -32,6 +32,13 @@ jobs:
           mv /tmp/model/vosk-model-small-en-us-0.15 android/app/src/main/assets/model-en-us
           uuidgen > android/app/src/main/assets/model-en-us/uuid
 
+      - name: Μοντέλο φωνής ομιλητή («μόνο η δική μου φωνή»)
+        run: |
+          curl -sSL -o /tmp/spk.zip https://alphacephei.com/vosk/models/vosk-model-spk-0.4.zip
+          unzip -q /tmp/spk.zip -d /tmp/spk
+          mv /tmp/spk/vosk-model-spk-0.4 android/app/src/main/assets/model-spk
+          ls -la android/app/src/main/assets/model-spk
+
       - name: Κλειδί υπογραφής (αν υπάρχει)
         env:
           KS: ${{ secrets.ANDROID_KEYSTORE_B64 }}

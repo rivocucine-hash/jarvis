@@ -20,6 +20,7 @@ import android.util.Log
 import org.json.JSONObject
 import org.vosk.Model
 import org.vosk.Recognizer
+import org.vosk.SpeakerModel
 import org.vosk.android.RecognitionListener
 import org.vosk.android.SpeechService
 import java.io.File
@@ -47,6 +48,15 @@ class WakeService : Service(), RecognitionListener {
         const val ACTION_SESSION_OFF = "gr.jarvis.app.SESSION_OFF"
         const val LOG_FILE = "wake.log"
         const val OK_FILE = "wake.ok"
+        /** Αναγνώριση φωνής χρήστη: εκμάθηση (5 φορές «Τζάρβις»), αποθηκευμένο «αποτύπωμα» φωνής, πρόοδος, όριο ομοιότητας. */
+        const val ACTION_ENROLL = "gr.jarvis.app.ENROLL"
+        const val SPK_FILE = "spk.json"
+        const val ENROLL_FILE = "spk.enroll"
+        const val THR_FILE = "spk.thr"
+        const val ENROLL_N = 5
+        fun spkFile(ctx: Context) = File(ctx.filesDir, SPK_FILE)
+        fun enrollFile(ctx: Context) = File(ctx.filesDir, ENROLL_FILE)
+        fun thrFile(ctx: Context) = File(ctx.filesDir, THR_FILE)
 
         /** Ισχύει μόνο μέσα στην κύρια διεργασία: αν έχουμε ζητήσει εκκίνηση της ακρόασης. */
         @Volatile var requested = false
@@ -108,6 +118,8 @@ class WakeService : Service(), RecognitionListener {
         try { val f = logFile(this); if (f.length() > 60000) f.delete() else if (f.exists()) f.appendText("\n----- νέα εκκίνηση -----\n") } catch (_: Throwable) {}
         log("0 διεργασία ακρόασης ξεκίνησε · Android " + Build.VERSION.RELEASE + " (SDK " + Build.VERSION.SDK_INT + ") · " + Build.MANUFACTURER + " " + Build.MODEL + " · " + Build.SUPPORTED_ABIS.joinToString())
         try { ensureChannels(this) } catch (e: Throwable) { logError("channels", e) }
+        // Μισοτελειωμένη εκμάθηση φωνής από προηγούμενη φορά: ακυρώνεται (η υπηρεσία δεν τη θυμάται).
+        try { val ef = enrollFile(this); if (ef.exists() && ef.readText().trim() != "done") ef.delete() } catch (_: Throwable) {}
         try { Health.start(this) } catch (e: Throwable) { logError("health", e) }
         try {
             if (Build.VERSION.SDK_INT >= 29) startForeground(1, ongoing(), ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
@@ -125,6 +137,7 @@ class WakeService : Service(), RecognitionListener {
             ACTION_RESUME -> resume()
             ACTION_SESSION_ON -> { sessionMode = true; log("λειτουργία προγράμματος") }
             ACTION_SESSION_OFF -> { sessionMode = false }
+            ACTION_ENROLL -> { enrollVecs.clear(); enrolling = true; writeEnroll("0/$ENROLL_N"); log("εκμάθηση φωνής: πείτε «Τζάρβις» $ENROLL_N φορές" + if (spkModel == null) " (ΠΡΟΣΟΧΗ: δεν φορτώθηκε το μοντέλο φωνής)" else "") }
             // stopSelf(startId): αν ήρθε ήδη νεότερο «ξεκίνα» (π.χ. κλείσε-άνοιξε από ρυθμίσεις), δεν κλείνει.
             ACTION_STOP -> { log("τερματισμός κατόπιν αιτήματος"); stopping = true; try { (getSystemService(Context.ALARM_SERVICE) as android.app.AlarmManager).cancel(restartIntent()) } catch (_: Throwable) {}; stopSelf(startId); return START_NOT_STICKY }
         }
@@ -154,7 +167,8 @@ class WakeService : Service(), RecognitionListener {
     override fun onDestroy() {
         stopListening()
         try { model?.close() } catch (_: Throwable) {}
-        model = null
+        try { spkModel?.close() } catch (_: Throwable) {}
+        model = null; spkModel = null
         super.onDestroy()
     }
 
@@ -186,6 +200,14 @@ class WakeService : Service(), RecognitionListener {
             val m = Model(dir.absolutePath)
             model = m
             log("6 ok")
+
+            // Μοντέλο φωνής ομιλητή (για «μόνο η δική μου φωνή»). Αν αποτύχει, η ακρόαση δουλεύει κανονικά χωρίς αυτό.
+            try {
+                val sdir = File(filesDir, "model-spk")
+                val smark = File(sdir, ".copied")
+                if (!smark.exists() && (assets.list("model-spk")?.isNotEmpty() == true)) { sdir.deleteRecursively(); copyAssets("model-spk", sdir); smark.writeText("ok") }
+                if (smark.exists()) { spkModel = SpeakerModel(sdir.absolutePath); log("6β μοντέλο φωνής ok" + if (spkFile(this).exists()) " · ακούω μόνο τη φωνή σας" else " · δεν έχει γίνει εκμάθηση φωνής") }
+            } catch (e: Throwable) { logError("μοντέλο φωνής", e); spkModel = null }
 
             main.post { startListening() }
         } catch (e: Throwable) {
@@ -246,6 +268,7 @@ class WakeService : Service(), RecognitionListener {
             // Λέξεις-«δολώματα» που μοιάζουν ηχητικά: απορροφούν άλλες ομιλίες, ώστε να μην ξυπνάει κατά λάθος.
             val rec = Recognizer(m, 16000f, "[\"jarvis\", \"service\", \"travis\", \"harvest\", \"nervous\", \"jar\", \"this\", \"yes\", \"the\", \"hey\", \"charge\", \"garbage\", \"[unk]\"]")
             rec.setWords(true)
+            spkModel?.let { try { rec.setSpeakerModel(it) } catch (e: Throwable) { logError("φωνή στον αναγνωριστή", e) } }
             log("8 άνοιγμα μικροφώνου")
             speech = SpeechService(rec, 16000f).also { it.startListening(this) }
             log("9 ΑΚΟΥΕΙ για «Τζάρβις»")
@@ -269,7 +292,62 @@ class WakeService : Service(), RecognitionListener {
     }
 
     private fun pause() { paused = true; pausedAt = SystemClock.elapsedRealtime(); stopListening() }
-    private fun resume() { paused = false; main.postDelayed({ startListening() }, 400) }
+    private fun resume() {
+        // Αμέσως μετά το «Τζάρβις» η εφαρμογή θα ανοίξει τη δική της ακρόαση για την εντολή: αν ξανανοίγαμε εδώ το μικρόφωνο,
+        // οι δύο ακροάσεις θα τσακώνονταν και η εντολή θα ακουγόταν πιο αργά ή χειρότερα.
+        if (SystemClock.elapsedRealtime() - lastWake < 3000) { log("αγνοήθηκε «συνέχισε» αμέσως μετά το «Τζάρβις»"); return }
+        paused = false; main.postDelayed({ startListening() }, 400)
+    }
+
+    /* ---------------- Φωνή χρήστη ---------------- */
+    private var spkModel: SpeakerModel? = null
+    @Volatile private var enrolling = false
+    private val enrollVecs = mutableListOf<DoubleArray>()
+    private var profile: DoubleArray? = null
+    private var profileStamp = -1L
+
+    private fun writeEnroll(s: String) { try { enrollFile(this).writeText(s) } catch (_: Throwable) {} }
+    private fun vec(json: JSONObject): DoubleArray? { val a = json.optJSONArray("spk") ?: return null; return DoubleArray(a.length()) { a.optDouble(it, 0.0) } }
+    private fun cosine(a: DoubleArray, b: DoubleArray): Double {
+        var d = 0.0; var na = 0.0; var nb = 0.0
+        for (i in 0 until minOf(a.size, b.size)) { d += a[i] * b[i]; na += a[i] * a[i]; nb += b[i] * b[i] }
+        return if (na == 0.0 || nb == 0.0) 0.0 else d / Math.sqrt(na * nb)
+    }
+    /** Το αποθηκευμένο αποτύπωμα φωνής (ξαναδιαβάζεται αν άλλαξε το αρχείο, π.χ. «ξέχνα τη φωνή μου»). */
+    private fun loadProfile(): DoubleArray? {
+        val f = spkFile(this)
+        if (!f.exists()) { profile = null; profileStamp = -1; return null }
+        if (f.lastModified() != profileStamp) {
+            profile = try { val a = org.json.JSONArray(f.readText()); DoubleArray(a.length()) { a.optDouble(it, 0.0) } } catch (_: Throwable) { null }
+            profileStamp = f.lastModified()
+        }
+        return profile
+    }
+    private fun threshold(): Double = try { thrFile(this).readText().trim().toDouble() } catch (_: Throwable) { 0.4 }
+
+    /** true = να ξυπνήσει. Στην εκμάθηση μαζεύει δείγματα και δεν ξυπνά. */
+    private fun voiceOk(json: JSONObject): Boolean {
+        val v = vec(json)
+        if (enrolling) {
+            if (v == null) { log("εκμάθηση: δεν βγήκε δείγμα φωνής, πείτε το ξανά"); return false }
+            enrollVecs += v
+            writeEnroll("${enrollVecs.size}/$ENROLL_N"); log("εκμάθηση φωνής: δείγμα ${enrollVecs.size}/$ENROLL_N")
+            if (enrollVecs.size >= ENROLL_N) {
+                val avg = DoubleArray(v.size); enrollVecs.forEach { s -> for (i in avg.indices) avg[i] += s[i] / enrollVecs.size }
+                // Πόσο μοιάζουν τα δείγματα με τον μέσο όρο: χρήσιμο για το όριο.
+                val sims = enrollVecs.map { cosine(it, avg) }
+                try { spkFile(this).writeText(org.json.JSONArray(avg.toList()).toString()) } catch (e: Throwable) { logError("αποθήκευση φωνής", e) }
+                enrolling = false; enrollVecs.clear(); writeEnroll("done")
+                log("εκμάθηση φωνής ολοκληρώθηκε · ομοιότητα δειγμάτων " + sims.joinToString(" ") { String.format(java.util.Locale.US, "%.2f", it) })
+            }
+            return false
+        }
+        val p = loadProfile() ?: return true
+        if (v == null) { log("φωνή: χωρίς δείγμα, ξυπνάω"); return true }
+        val sim = cosine(v, p); val thr = threshold()
+        log("φωνή: ομοιότητα " + String.format(java.util.Locale.US, "%.2f", sim) + " (όριο " + String.format(java.util.Locale.US, "%.2f", thr) + ")")
+        return sim >= thr
+    }
 
     /* ---------------- Vosk ---------------- */
     override fun onPartialResult(hypothesis: String?) {
@@ -298,6 +376,7 @@ class WakeService : Service(), RecognitionListener {
             // Η ελληνική προφορά του «Τζάρβις» βγάζει χαμηλότερη βεβαιότητα (π.χ. 0.73 απορρίφθηκε με όριο 0.85).
             if (conf < (if (sessionMode) 0.55 else 0.6)) { log("αγνοήθηκε «jarvis» με βεβαιότητα " + String.format(java.util.Locale.US, "%.2f", conf)); return }
         }
+        if (!voiceOk(json)) { if (!enrolling && loadProfile() != null) log("άλλη φωνή: δεν ξυπνάω"); return }
         fire()
     }
 
